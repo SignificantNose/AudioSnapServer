@@ -1,0 +1,7 @@
+POST https://localhost:7144/snap
+Content-Type: application/json
+Accept: application/json
+
+{
+  "content" : "content will be present here once the structure is defined"
+}
