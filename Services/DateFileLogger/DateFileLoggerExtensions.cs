@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+﻿using AudioSnapServer.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Configuration;
 
 namespace AudioSnapServer.Services.DateFileLogger;
@@ -7,7 +8,7 @@ public static class DateFileLoggerExtensions
 {
     public static ILoggingBuilder AddDateFile(
         this ILoggingBuilder builder, 
-        string logDirPath, 
+        string logDirPath,
         string? logFileName = null)
     {
         if (logFileName == null)
@@ -16,7 +17,8 @@ public static class DateFileLoggerExtensions
         }
         // builder.AddConfiguration();
         // builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, DateFileLoggerProvider>());
-        // LoggerProviderOptions.RegisterProviderOptions<DateFileLoggerConfiguration, DateFileLoggerProvider>(builder.Services);
+        // LoggerProviderOptions.RegisterProviderOptions<DateFileLoggerOptions, DateFileLoggerProvider>(builder.Services);
+        
         builder.AddProvider(new DateFileLoggerProvider(logDirPath, logFileName));
         return builder;
 

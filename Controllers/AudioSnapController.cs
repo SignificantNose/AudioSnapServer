@@ -21,13 +21,14 @@ public class AudioSnapController : ControllerBase
     }
 
     [HttpPost]
-    public IActionResult SnapFingerprint(AudioSnapRequest request)
+    public async Task<IActionResult> SnapFingerprint(AudioSnapRequest request)
     {
         AudioSnap? snap = _snapService.GetSnapByHash();
         if (snap == null)
         {
             // calculate the snap, get all the required data and save it
-            _snapService.SaveSnap();
+            snap = await _snapService.GetSnapByFingerprint();
+            // _snapService.SaveSnap();
         }
 
         return Ok(snap);
