@@ -5,16 +5,6 @@ namespace AudioSnapServer.Options;
 
 public static class AppOptionsExtensions
 {
-    public static IServiceCollection AddLoggingOptions(
-        this IServiceCollection services,
-        ConfigurationManager config)
-    {
-        services.Configure<DateFileLoggerOptions>(
-            config.GetSection(DateFileLoggerOptions.ConfigurationSectionName));
-        
-        return services;
-    }
-
     public static IServiceCollection AddAPIOptions(
         this IServiceCollection services,
         ConfigurationManager config)
@@ -30,6 +20,7 @@ public static class AppOptionsExtensions
         // upd: maybe it might be useful somewhere else?..
         services.Configure<ExternalAPIHostsOptions>(
             config.GetSection(ExternalAPIHostsOptions.ConfigurationSectionName));
+        
         return services;
     }
 

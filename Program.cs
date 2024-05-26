@@ -3,21 +3,26 @@ using System.Net.Http.Headers;
 using AudioSnapServer.Options;
 using AudioSnapServer.Services.AudioSnap;
 using AudioSnapServer.Services.DateFileLogger;
+using AudioSnapServer.Services.Logging;
+using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 
 // Utilizing AppOptionsExtensions initialization methods
-// builder.Services.AddLoggingOptions(builder.Configuration);       // using Options is redundant here imho
 builder.Services.AddAPIOptions(builder.Configuration);
 builder.Services.AddAPIHttpClients();
 
 // Initializing loggers
+// (imho using Options pattern is redundant
+// in the context of logger initialization)
 string? logDirPath = builder.Configuration["Logging:DateFile:LogDirPath"];
 if (logDirPath == null)
 {
-    logDirPath = "logs/";
+    logDirPath = "logs"+Path.DirectorySeparatorChar;
 }
 if (!Directory.Exists(logDirPath))
 {
@@ -30,9 +35,10 @@ builder.Logging.AddDateFile(logDirPath);
 
 builder.Services.AddScoped<IAudioSnapService, AudioSnapService>();
 
+builder.Services.Replace(ServiceDescriptor.Singleton<IHttpMessageHandlerBuilderFilter, CompactHttpLoggingFilter>());
+
 
 var app = builder.Build();
-
 if (app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/error-development");

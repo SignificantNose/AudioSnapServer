@@ -39,7 +39,7 @@ public class AudioSnapService : IAudioSnapService
             return null;
         }
         
-        _logger.LogInformation("AID response: "+await response.Content.ReadAsStringAsync());
+        // _logger.LogInformation("AID response: "+await response.Content.ReadAsStringAsync());
 
 
         HttpClient MB_Client = _httpClientFactory.CreateClient("musicbrainz");
@@ -57,7 +57,7 @@ public class AudioSnapService : IAudioSnapService
             return null;
         }
         
-        _logger.LogInformation("MB response: "+await response.Content.ReadAsStringAsync());
+        // _logger.LogInformation("MB response: "+await response.Content.ReadAsStringAsync());
 
         HttpRequestMessage MB_requestRelease = new HttpRequestMessage(
             HttpMethod.Get,
@@ -73,7 +73,7 @@ public class AudioSnapService : IAudioSnapService
             return null;
         }
 
-        _logger.LogInformation("MB response: "+await response.Content.ReadAsStringAsync());
+        // _logger.LogInformation("MB response: "+await response.Content.ReadAsStringAsync());
 
 
         HttpClient CAA_Client = _httpClientFactory.CreateClient("coverartarchive");
@@ -88,7 +88,7 @@ public class AudioSnapService : IAudioSnapService
             return null;
         }
 
-        _logger.LogInformation("CAA response: "+await response.Content.ReadAsStringAsync());
+        // _logger.LogInformation("CAA response: "+await response.Content.ReadAsStringAsync());
         
         return null;
     }
