@@ -2,6 +2,11 @@
 
 namespace AudioSnapServer.Models;
 
+// The structure of the class has been chosen based on
+// the queries sent and the expected response. A more
+// general structure that provides support for a broader
+// set of response values can be found here:
+// https://github.com/Zastai/MetaBrainz.MusicBrainz
 public record class MusicBrainz_APIResponse(
     // release-groups -> title                                (album)
     // release-groups -> artist-credit -> artist -> name      (album-artists)
@@ -41,7 +46,7 @@ public record class MusicBrainz_APIResponse(
         // tracks -> artist -> name           (artists)
         // track-offset                       (track-1)
         // track-count                        (track-count)
-        [property: JsonPropertyName("media")] Media Media,
+        [property: JsonPropertyName("media")] List<Media> Media,
         
         // prioritization
         [property: JsonPropertyName("country")] string Country

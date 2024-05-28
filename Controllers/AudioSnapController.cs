@@ -1,4 +1,5 @@
-﻿using AudioSnapServer.Models;
+﻿using System.Text.Json;
+using AudioSnapServer.Models;
 using AudioSnapServer.Services.AudioSnap;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -21,21 +22,21 @@ public class AudioSnapController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> SnapFingerprint(AudioSnapRequest request)
+    public async Task<IActionResult> SnapFingerprint(AudioSnapClientQuery query)
     {
         AudioSnap? snap = _snapService.GetSnapByHash();
         if (snap == null)
         {
             // calculate the snap, get all the required data and save it
-            snap = await _snapService.GetSnapByFingerprint();
+            snap = await _snapService.GetSnapByFingerprint(query);
             // _snapService.SaveSnap();
+        }
+
+        if (snap != null)
+        {
+            // custom serialize
         }
 
         return Ok(snap);
     }
-}
-
-// TODO: reference the request in chromalib once it appears
-public class AudioSnapRequest
-{
 }

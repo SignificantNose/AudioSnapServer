@@ -4,6 +4,6 @@ using AudioSnapServer.Models;
 public interface IAudioSnapService
 {
     AudioSnap? GetSnapByHash();
-    Task<AudioSnap?> GetSnapByFingerprint();
+    Task<AudioSnap?> GetSnapByFingerprint(AudioSnapClientQuery query);
     void SaveSnap();
 }

@@ -74,6 +74,7 @@ public static class AppOptionsExtensions
                 serviceProvider.GetRequiredService<IOptions<ExternalAPIHostsOptions>>().Value;
     
             httpClient.BaseAddress = hostsOptions.CoverArtArchive;
+            httpClient.Timeout = TimeSpan.FromSeconds(5);
         }).SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
         return services;
