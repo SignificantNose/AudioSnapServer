@@ -28,7 +28,8 @@ public record class MusicBrainz_APIResponse(
     
     
     
-    [property: JsonPropertyName("media")] List<MusicBrainz_APIResponse.Media> ReleaseMedia
+    [property: JsonPropertyName("media")] List<MusicBrainz_APIResponse.Media> ReleaseMedia,
+    [property: JsonPropertyName("relations")] List<MusicBrainz_APIResponse.Relations> ReleaseRelations
     )
 {
     public record class Release(
@@ -104,5 +105,13 @@ public record class MusicBrainz_APIResponse(
         [property: JsonPropertyName("genres")] List<string> Genres,
         // (track-id)
         [property: JsonPropertyName("id")] string Id
+        );
+
+    public record class Relations(
+        [property: JsonPropertyName("url")] RelationUrl url
+        );
+
+    public record class RelationUrl(
+        [property: JsonPropertyName("resource")] Uri Resource
         );
 }

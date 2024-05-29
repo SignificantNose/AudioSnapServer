@@ -32,11 +32,27 @@ public class AudioSnapController : ControllerBase
             // _snapService.SaveSnap();
         }
 
+        string res = "";
         if (snap != null)
         {
             // custom serialize
+
+            JsonSerializerOptions options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters =
+                {
+                    new AudioSnapJsonConverter(
+                        snap.response.ValidProperties.ToList()
+                    )
+                }
+            };
+            res = JsonSerializer.Serialize(snap, options);
         }
 
+        // TODO: Make the external-links and image-link outside of the properties object
+        
+        return Content(res,"application/json");
         return Ok(snap);
     }
 }

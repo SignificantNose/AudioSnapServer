@@ -8,7 +8,7 @@ public record class CoverArtArchive_APIResponse(
 {
     public record class Image(
         [property: JsonPropertyName("image")] Uri OriginalImage,
-        [property: JsonPropertyName("thumbnails")] List<ThumbnailLinks> Thumbnails
+        [property: JsonPropertyName("thumbnails")] ThumbnailLinks Thumbnails
     );
 
     public record class ThumbnailLinks(

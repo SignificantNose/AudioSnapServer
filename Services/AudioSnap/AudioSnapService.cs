@@ -1,4 +1,5 @@
-﻿using AudioSnapServer.Options;
+﻿using System.Collections.ObjectModel;
+using AudioSnapServer.Options;
 using Microsoft.Extensions.Options;
 
 namespace AudioSnapServer.Services.AudioSnap;
@@ -42,76 +43,268 @@ public class AudioSnapService : IAudioSnapService
     public async Task<AudioSnap?> GetSnapByFingerprint(AudioSnapClientQuery query)
     {
         AudioSnap snap = new AudioSnap();
+        snap.response = new SnapUserResponseData();
         
-        AcoustID_APIResponse? AID_response = await AcoustID_QueryAsync(query.Fingerprint, query.DurationInSeconds);
-        if (AID_response == null || 
-            AID_response.Status!="ok" || 
-            AID_response.Results.Count<1 || 
-            AID_response.Results[0].Recordings.Count<1)
+        // analyze properties to include
+        
+        HashSet<string> validProperties = new HashSet<string>();
+        HashSet<string> invalidProperties = new HashSet<string>();
+        
+        // how convenient would've this been if typedef existed
+        byte neededComponents = 0;
+        foreach (string queryProperty in query.ReleaseProperties)
         {
-            // logging already complete
-            return null;
+            if (AudioSnap.PropertyMappings.Keys.Contains(queryProperty))
+            {
+                validProperties.Add(queryProperty);
+                byte currMask = AudioSnap.PropertyMappings[queryProperty].Mask;
+                if(currMask!=AudioSnap.NC_SPECIALPRESENT)
+                    neededComponents |= AudioSnap.PropertyMappings[queryProperty].Mask;
+            }
+            else
+            {
+                invalidProperties.Add(queryProperty);
+            }
+        }
+        
+        // adjust needed components
+        neededComponents = AudioSnap.AdjustNC(neededComponents);
+        
+        
+        // find the components
+        
+        // 1. AcoustID response
+        byte retrievedComponents = 0;
+        if ((neededComponents & AudioSnap.NC_AID_RESPONSE) != 0)
+        {
+            AcoustID_APIResponse? aid_response = await QueryAPI<AcoustID_APIResponse>
+                ("acoustid", 
+                    FormQuery_AcoustID(_options.AcoustIDKey, query.DurationInSeconds, query.Fingerprint));
+            if (aid_response == null || 
+                aid_response.Status!="ok" || 
+                aid_response.Results.Count<1 )
+            {
+                // TODO: Provide meaningful error messages
+                snap.response.Status = false;
+                snap.response.ErrorMessage = "AcoustID error: failed to retrieve proper response";
+            }
+            else
+            {
+                retrievedComponents |= AudioSnap.NC_AID_RESPONSE;
+                snap.AcoustIDResponse = aid_response;
+            }
+        }
+        
+        
+        // maybe looking at the value of retrievedComponents is
+        // kind of redundant and can be resolved with one bool
+        // variable, but I think that it makes code look more
+        // readable & logical
+        // 
+        // moreover, if any error occurred beforehand, it will
+        // not cause errors later on
+        
+        // 2. MusicBrainz recording ID
+        // I'm checking the easily-acquirable value, even if it is
+        // not needed, so that if any errors related to incorrect
+        // mapping of properties come up
+        if ((neededComponents & AudioSnap.NC_MB_RECORDINGID) != 0 &&
+            (retrievedComponents & AudioSnap.NC_AID_RESPONSE) != 0)
+        {
+            if (snap.AcoustIDResponse.Results[0].Recordings.Count < 1)
+            {
+                snap.response.Status = false;
+                snap.response.ErrorMessage = "No recordings were found in AcoustID response";
+            }
+            else
+            {
+                // choose the recording with the most score 
+                // (assuming that it's the first one in the list)
+                // TODO: check if the recording with the largest score really is the first one
+                snap.RecordingID = snap.AcoustIDResponse.Results[0].Recordings[0].RecordingID;
+                retrievedComponents |= AudioSnap.NC_MB_RECORDINGID;
+            }
+        }
+        
+        // 3. MusicBrainz Recording Response
+        if ((neededComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0 &&
+            (retrievedComponents & AudioSnap.NC_MB_RECORDINGID)!=0)
+        {
+            //if(recordingID is not present in the database already)
+            if (false)
+            {
+                // return result from the database
+                return null;
+            }
+            else
+            {
+                MusicBrainzEntry entry = MusicBrainzEntry.E_Recording;
+                MusicBrainzQuery queryParams = _queryParameters[entry];
+                MusicBrainz_APIResponse? mb_response = await QueryAPI<MusicBrainz_APIResponse>(
+                    "musicbrainz",
+                    FormQuery_MusicBrainz(
+                        queryParams.Entry,
+                        snap.RecordingID,
+                        queryParams.Parameters
+                    )
+                    );
+                if (mb_response == null)
+                {
+                    // TODO: make reasonable error messages
+                    snap.response.Status = false;
+                    snap.response.ErrorMessage = "MusicBrainz error: response is null for recording query";
+                }
+                else
+                {
+                    retrievedComponents |= AudioSnap.NC_MB_RECORDINGRESPONSE;
+                    snap.RecordingResponse = mb_response;
+                }
+            }
         }
 
-        snap.AcoustIDResponse = AID_response;
-        
-        // choose the recording with the most score 
-        // (assuming that it's the first one in the list)
-        // TODO: check if the recording with the largest score really is the first one
-        string recordingID = AID_response.Results[0].Recordings[0].RecordingID;
-        
-        //if(recordingID is not present in the database already)
-        if (false)
+        // 4. Choosing prioritized release
+        if ((neededComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0 &&
+            (retrievedComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0)
         {
-            // return result from the database
-            return null;
-        }
-        
-        // query MusicBrainz for this recording (by its ID)
-        MusicBrainz_APIResponse MB_responseRecording =
-            await MusicBrainz_QueryAsync(MusicBrainzEntry.E_Recording, recordingID);
-        if (MB_responseRecording == null)
-        {
-            // logging already complete
-            return null;
+            if (snap.RecordingResponse.Releases.Count < 1)
+            {
+                snap.response.Status = false;
+                snap.response.ErrorMessage = "No releases were found in MusicBrainz response on recording query";
+            }
+            else
+            {
+                // applying preferences
+                // (for now, choose first releaseID found)
+                retrievedComponents |= AudioSnap.NC_MB_RECPRIORITIZEDRELEASE;
+                snap.RecordingPrioritizedRelease = snap.RecordingResponse.Releases[0];
+            }
         }
 
-        snap.RecordingResponse = MB_responseRecording;
-            
-        // applying preferences
-        // (for now, choose first releaseID found)
-        snap.RecordingPrioritizedRelease = MB_responseRecording.Releases[0];
-        string preferredReleaseID = snap.RecordingPrioritizedRelease.Id;
-        snap.ReleaseMedia = snap.RecordingPrioritizedRelease.Media[0];
-        
-        // if(releaseID is not present in the database already)
-        if (false)
+        // 5. Validating release media component
+        if ((neededComponents & AudioSnap.NC_MB_RELEASEMEDIA) != 0 &&
+            (retrievedComponents & AudioSnap.NC_MB_RECORDINGRESPONSE)!=0)
         {
-            // return database entry
-            return null;
+            // default to first media component
+            if (snap.RecordingPrioritizedRelease.Media.Count < 1)
+            {
+                snap.response.Status = false;
+                snap.response.ErrorMessage = "No media content found in prioritized release";
+            }
+            else
+            {
+                retrievedComponents |= AudioSnap.NC_MB_RELEASEMEDIA;
+                snap.ReleaseMedia = snap.RecordingPrioritizedRelease.Media[0];
+            }
         }
         
-        // querying MusicBrainz for the release (by its ID)
-        MusicBrainz_APIResponse MB_responseRelease =
-            await MusicBrainz_QueryAsync(MusicBrainzEntry.E_Release, preferredReleaseID);
-        if (MB_responseRelease == null)
-        {
-            // logging already complete
-            return null;
-        }
-
-        snap.ReleaseResponse = MB_responseRelease;
-        snap.ChosenTrack = snap.ReleaseResponse.ReleaseMedia[0].Tracks[snap.ReleaseMedia.TrackOffset];
         
-        CoverArtArchive_APIResponse CAA_response = await CoverArtArchive_QueryAsync(preferredReleaseID);
-        if (CAA_response == null)
+        // 6. Release response
+        if ((neededComponents & AudioSnap.NC_MB_RELEASERESPONSE) != 0 &&
+            (retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
         {
-            // logging already complete
-            return null;
+            string preferredReleaseID = snap.RecordingPrioritizedRelease.Id;
+            // if(releaseID is not present in the database already)
+            if (false)
+            {
+                // return database entry
+                return null;
+            }
+            else
+            {
+                MusicBrainzEntry entry = MusicBrainzEntry.E_Release; 
+                MusicBrainzQuery queryParams = _queryParameters[entry];
+                MusicBrainz_APIResponse? response = await QueryAPI<MusicBrainz_APIResponse>(
+                    "musicbrainz", 
+                    FormQuery_MusicBrainz(
+                        queryParams.Entry,
+                        preferredReleaseID,
+                        queryParams.Parameters
+                        )
+                    );
+
+                if (response == null)
+                {
+                    // TODO: make reasonable error messages
+                    snap.response.Status = false;
+                    snap.response.ErrorMessage = "MusicBrainz error: response is null for release query";
+                }
+                else
+                {
+                    retrievedComponents |= AudioSnap.NC_MB_RELEASERESPONSE;
+                    snap.ReleaseResponse = response;
+                }
+            }
+        }
+        
+        // 7. Choosing the track
+        if ((neededComponents & AudioSnap.NC_MB_CHOSENTRACK) != 0 &&
+            (retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
+        {
+            // defaulting to 0th release media component
+            if (snap.ReleaseResponse.ReleaseMedia.Count < 1)
+            {
+                snap.response.Status = false;
+                snap.response.ErrorMessage = "No media components were found in release response";
+            }
+            else
+            {
+                // the Tracks list is expected to have at least offset+1 tracks
+                snap.ChosenTrack = snap.ReleaseResponse.ReleaseMedia[0].Tracks[snap.ReleaseMedia.TrackOffset];
+                retrievedComponents |= AudioSnap.NC_MB_CHOSENTRACK;
+            }
+        }
+        
+        // 8. Retrieving cover art
+        if ((neededComponents & AudioSnap.NC_CAA_RESPONSE) != 0 &&
+            (retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
+        {
+            string preferredReleaseID = snap.RecordingPrioritizedRelease.Id;
+            CoverArtArchive_APIResponse? response = await QueryAPI<CoverArtArchive_APIResponse>(
+                "coverartarchive",
+                FormQuery_CoverArtArchive(preferredReleaseID)
+                );
+
+            if (response == null)
+            {
+                snap.response.Status = false;
+                snap.response.ErrorMessage = "No media components were found in release response";
+            }
+            else
+            {
+                snap.CoverArtArchiveResponse = response;
+                retrievedComponents |= AudioSnap.NC_CAA_RESPONSE;
+            }
+        }
+        
+        // analyzing the retrieved components, then forming the list
+        // of values that actually can be retrieved from the snap
+
+        // List<string> missingProperties = new List<string>();
+        // missingProperties.AddRange(validProperties.Where(property =>
+        // {
+            // byte currMask = AudioSnap.PropertyMappings[property].Mask;
+            // return (currMask != AudioSnap.NC_SPECIALPRESENT &&
+                    // (retrievedComponents & currMask) == 0);
+        // }));
+        // validProperties.RemoveAll(property => missingProperties.Contains(property));
+        
+        HashSet<string> missingProperties = new HashSet<string>();
+        foreach (string property in validProperties)
+        {
+            byte currMask = AudioSnap.PropertyMappings[property].Mask;
+            if (currMask != AudioSnap.NC_SPECIALPRESENT &&
+                (retrievedComponents & currMask) == 0)
+            {
+                missingProperties.Add(property);
+            }
         }
 
-        snap.CoverArtArchiveResponse = CAA_response;
+        validProperties.Except(missingProperties);
 
+        // filling in the response
+        snap.response.InvalidProperties = invalidProperties;
+        snap.response.MissingProperties = missingProperties;
+        snap.response.ValidProperties = validProperties;
         return snap;
     }
 
@@ -120,6 +313,35 @@ public class AudioSnapService : IAudioSnapService
         throw new NotImplementedException();
     }
 
+
+    private async Task<API_Response?> QueryAPI<API_Response>(string httpClientName, string QueryUri)
+    {
+        HttpClient httpClient = _httpClientFactory.CreateClient(httpClientName);
+        HttpRequestMessage request = 
+            new HttpRequestMessage(
+                HttpMethod.Get, 
+                QueryUri
+                );
+
+        API_Response? typedResponse = default(API_Response);
+
+        try
+        {
+            HttpResponseMessage httpResponse = await httpClient.SendAsync(request);
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                _logger.LogError($"{httpClientName} client: API responded with status code other than success.");
+                return default(API_Response);
+            }
+            typedResponse = await httpResponse.Content.ReadFromJsonAsync<API_Response>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"{httpClientName} client: response error: "+ex.Message);
+        }
+
+        return typedResponse;
+    }
 
     private async Task<AcoustID_APIResponse?> AcoustID_QueryAsync(string fingerprint, int duration)
     { 
