@@ -17,3 +17,13 @@ public class ReleaseStorage
     [Column("cover-response")]
     public string? CoverResponse { get; set; }
 }
+
+public record class ReleaseDBResponse(
+    string ReleaseID,
+    string? ReleaseJson
+    );
+    
+public record class CoverArtDBResponse(
+    string ReleaseID,
+    string? CoverArtJson
+    );

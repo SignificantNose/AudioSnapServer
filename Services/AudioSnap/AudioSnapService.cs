@@ -289,17 +289,17 @@ public class AudioSnapService : IAudioSnapService
             // if(releaseID is not present in the database already)
 
             MusicBrainz_APIResponse? snapMBRelease = null;
-            IQueryable<ReleaseStorage> dbQuery =
+            IQueryable<ReleaseDBResponse> dbQuery =
                 from e in _dbContext.Releases
                 where e.ReleaseID == preferredReleaseID
-                select e;
-            ReleaseStorage? dbMBRelease = dbQuery.FirstOrDefault();
+                select new ReleaseDBResponse(e.ReleaseID, e.ReleaseResponse);
+            ReleaseDBResponse? dbMBRelease = dbQuery.FirstOrDefault();
             if(dbMBRelease!=null)
             {
                 // return database entry
-                if (dbMBRelease.ReleaseResponse != null)
+                if (dbMBRelease.ReleaseJson != null)
                 {
-                    snapMBRelease = JsonSerializer.Deserialize<MusicBrainz_APIResponse>(dbMBRelease.ReleaseResponse);
+                    snapMBRelease = JsonSerializer.Deserialize<MusicBrainz_APIResponse>(dbMBRelease.ReleaseJson);
                 }
                 else
                 {
@@ -374,12 +374,12 @@ public class AudioSnapService : IAudioSnapService
             CoverArtArchive_APIResponse? snapCAA = null;
             string preferredReleaseID = snap.RecordingPrioritizedRelease.Id;
 
-            IQueryable<ReleaseStorage> dbQuery =
+            IQueryable<CoverArtDBResponse> dbQuery =
                 from e in _dbContext.Releases
                 where e.ReleaseID == preferredReleaseID
-                select e;
+                select new CoverArtDBResponse(e.ReleaseID, e.CoverResponse);
 
-            ReleaseStorage? dbCAA = dbQuery.FirstOrDefault();
+            CoverArtDBResponse? dbCAA = dbQuery.FirstOrDefault();
             if (dbCAA == null)
             {
                 // error occurred. do not continue
@@ -391,10 +391,10 @@ public class AudioSnapService : IAudioSnapService
             }
             else
             {
-                if (dbCAA.CoverResponse != null)
+                if (dbCAA.CoverArtJson != null)
                 {
                     // take from db
-                    snapCAA = JsonSerializer.Deserialize<CoverArtArchive_APIResponse>(dbCAA.CoverResponse);
+                    snapCAA = JsonSerializer.Deserialize<CoverArtArchive_APIResponse>(dbCAA.CoverArtJson);
                 }
                 else
                 {
@@ -409,7 +409,10 @@ public class AudioSnapService : IAudioSnapService
                     }
                     else
                     {
-                        dbCAA.CoverResponse = JsonSerializer.Serialize(snapCAA);
+                        string serializedCAA = JsonSerializer.Serialize(snapCAA);
+                        await _dbContext.Releases
+                            .Where(e => e.ReleaseID == preferredReleaseID)
+                            .ExecuteUpdateAsync(e => e.SetProperty(p => p.CoverResponse, serializedCAA));
                         await _dbContext.SaveChangesAsync();
                     }
                 }
