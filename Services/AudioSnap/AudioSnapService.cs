@@ -300,21 +300,7 @@ public class AudioSnapService : IAudioSnapService
                 if (matchingScore >= query.MatchingRate)
                 {
                     // make it so
-                    snapAID = new AcoustID_APIResponse(
-                        Results: new List<AcoustID_APIResponse.Result>()
-                        {
-                            new AcoustID_APIResponse.Result(
-                                dbResult.AcoustID,
-                                dbResult.MatchingScore,
-                                new List<AcoustID_APIResponse.Recording>()
-                                {
-                                    new AcoustID_APIResponse.Recording(dbResult.RecordingID)
-                                }
-                            )
-                        },
-                        Status: "ok",
-                        QueryError: null
-                        );
+                    snapAID = AcoustID_APIResponse.FormFromDbResponse(dbResult);
                 }
             }
             
@@ -368,21 +354,7 @@ public class AudioSnapService : IAudioSnapService
                             }
                             
                             // use the database entry as the response
-                            snapAID = new AcoustID_APIResponse(
-                                Results: new List<AcoustID_APIResponse.Result>()
-                                {
-                                    new AcoustID_APIResponse.Result(
-                                        entry.AcoustID,
-                                        entry.MatchingScore,
-                                        new List<AcoustID_APIResponse.Recording>()
-                                        {
-                                            new AcoustID_APIResponse.Recording(entry.RecordingID)
-                                        }
-                                    )
-                                },
-                                Status: "ok",
-                                QueryError: null
-                            );
+                            snapAID = AcoustID_APIResponse.FormFromDbResponse(entry);
                         }
                         else
                         {

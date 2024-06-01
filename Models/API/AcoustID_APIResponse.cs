@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using AudioSnapServer.Models.ResponseStorage;
 
 namespace AudioSnapServer.Models;
 
@@ -24,6 +25,25 @@ public record class AcoustID_APIResponse(
     [property: JsonPropertyName("error")] AcoustID_APIResponse.Error QueryError
 )
 {
+    public static AcoustID_APIResponse FormFromDbResponse(AcoustIDStorage entry)
+    {
+        return new AcoustID_APIResponse(
+            Results: new List<AcoustID_APIResponse.Result>()
+            {
+                new AcoustID_APIResponse.Result(
+                    entry.AcoustID,
+                    entry.MatchingScore,
+                    new List<AcoustID_APIResponse.Recording>()
+                    {
+                        new AcoustID_APIResponse.Recording(entry.RecordingID)
+                    }
+                )
+            },
+            Status: "ok",
+            QueryError: null
+        );
+    }
+
     public record class Result(
         [property: JsonPropertyName("id")] string AcoustID_ID,
         [property: JsonPropertyName("score")] double MatchScore,
