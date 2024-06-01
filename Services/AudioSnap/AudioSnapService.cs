@@ -67,6 +67,13 @@ public class AudioSnapService : IAudioSnapService
         _neededComponents = 0;
         _retrievedComponents = 0;
         
+        // For now, a simple validation tool on acquired properties
+        // exists, the logic for checking if an image has been acquired
+        // would've made things more complex imho. But at least now 
+        // the server can support multiple types of requiring links,
+        // both image and external: by setting a bool parameter and
+        // by setting the required property in an array
+        
         if (query.IncludeCover) query.ReleaseProperties.Add("image-link");
         if (query.IncludeExternalLinks) query.ReleaseProperties.Add("external-links");
         
