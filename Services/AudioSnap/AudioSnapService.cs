@@ -204,7 +204,7 @@ public class AudioSnapService : IAudioSnapService
             }
         }
 
-        _audioSnap.ValidProperties.Except(_audioSnap.MissingProperties);
+        _audioSnap.ValidProperties.ExceptWith(_audioSnap.MissingProperties);
     }
     
     private Uri GetDesiredImageLink(CoverArtArchive_APIResponse.Image img, int imgSize)
@@ -277,38 +277,51 @@ public class AudioSnapService : IAudioSnapService
             uint fpHash = SimHash.Compute(fingerprint);
     
             // search it in the database
-            int bitThreshold = 3;
+            // int bitThreshold = 3;
             int durationThreshold = 10;
 
             IOrderedQueryable<AcoustIDStorage> dbQuery = from e in _dbContext.AcoustIDs
-                where _dbContext.GetAbsDiff(e.Duration,query.DurationInSeconds)<durationThreshold && 
-                      _dbContext.GetBitDiff(e.Hash, fpHash)<bitThreshold 
-                orderby e.MatchingScore
+                where _dbContext.GetAbsDiff(e.Duration,query.DurationInSeconds)<durationThreshold //&& 
+                      // _dbContext.GetBitDiff(fpHash, e.Hash )<bitThreshold &&
+                      // (_dbContext.GetBitDiff(fpHash, e.Hash)/(double)sizeof(uint))*e.MatchingScore > query.MatchingRate
+                orderby ((double)_dbContext.GetBitDiff(fpHash, e.Hash)/sizeof(uint))*e.MatchingScore
                 select e;
-
+            
             AcoustIDStorage? dbResult = dbQuery.FirstOrDefault();
+            
+            
             AcoustID_APIResponse? snapAID = null;
             if (dbResult != null)
             {
-                // make it so
-                snapAID = new AcoustID_APIResponse(
-                    Results: new List<AcoustID_APIResponse.Result>()
-                    {
-                        new AcoustID_APIResponse.Result(
-                            dbResult.AcoustID,
-                            dbResult.MatchingScore,
-                            new List<AcoustID_APIResponse.Recording>()
-                            {
-                                new AcoustID_APIResponse.Recording(dbResult.RecordingID)
-                            }
-                        )
-                    },
-                    Status: "ok",
-                    QueryError: null
-                    );
+                // don't know any other way to take the calculated value from the query,
+                // especially how to make a variable in SQL query, especially using linq
+                double matchingScore = (double)((sizeof(uint)<<3)-uint.PopCount(dbResult.Hash ^ fpHash)) / (sizeof(uint)<<3)*dbResult.MatchingScore;
+
+                if (matchingScore >= query.MatchingRate)
+                {
+                    // make it so
+                    snapAID = new AcoustID_APIResponse(
+                        Results: new List<AcoustID_APIResponse.Result>()
+                        {
+                            new AcoustID_APIResponse.Result(
+                                dbResult.AcoustID,
+                                dbResult.MatchingScore,
+                                new List<AcoustID_APIResponse.Recording>()
+                                {
+                                    new AcoustID_APIResponse.Recording(dbResult.RecordingID)
+                                }
+                            )
+                        },
+                        Status: "ok",
+                        QueryError: null
+                        );
+                }
             }
-            else
+            
+            
+            if (snapAID==null)
             {
+                
                 snapAID = await QueryAPI<AcoustID_APIResponse>
                 ("acoustid",
                     APIQueryBuilder.Q_AcoustID(_options.AcoustIDKey, query.DurationInSeconds, query.Fingerprint));
@@ -324,20 +337,83 @@ public class AudioSnapService : IAudioSnapService
                 }
                 else
                 {
-                    if(snapAID.Results.Count!=1) _logger.LogInformation(
-                        $"AcoustID response with multiple results found: {JsonSerializer.Serialize(snapAID)}");
-                    
-                    AcoustID_APIResponse.Result result = snapAID.Results[0];
-                    var mostScoredRecordingId = result.Recordings.OrderByDescending(e => e.RecordingID).First().RecordingID;
-                    await _dbContext.AcoustIDs.AddAsync(new AcoustIDStorage()
+
+                    AcoustID_APIResponse.Result mostScoredResult = 
+                        snapAID.Results.OrderByDescending(e => e.MatchScore).First();
+                    if (mostScoredResult.Recordings.Count < 1)
                     {
-                        Hash = fpHash,
-                        AcoustID = result.AcoustID_ID,
-                        Duration = query.DurationInSeconds,
-                        MatchingScore = result.MatchScore,
-                        RecordingID = mostScoredRecordingId
-                    });
-                    await _dbContext.SaveChangesAsync();
+                        // unexpected error
+                        string msg = $"AcoustID response with no recording IDs found: {JsonSerializer.Serialize(snapAID)}"; 
+                        _logger.LogError(msg);
+                        return msg;
+                    }
+                    else
+                    {
+                        string mostScoredRecordingId = mostScoredResult.Recordings[0].RecordingID;
+                        
+                        // if the acquired result exists in the database and its matching score
+                        // is larger than the one stored in a database, update the database entry
+                        AcoustIDStorage? entry = _dbContext.AcoustIDs.Find(mostScoredResult.AcoustID_ID);
+
+                        if (entry != null)
+                        {
+                            // entry found. Look at its matching rate
+                            if (entry.MatchingScore < mostScoredResult.MatchScore)
+                            {
+                                // update the database entry
+                                entry.MatchingScore = mostScoredResult.MatchScore;
+                                entry.RecordingID = mostScoredRecordingId;
+                                entry.Duration = query.DurationInSeconds;
+                                entry.Hash = fpHash;
+                            }
+                            
+                            // use the database entry as the response
+                            snapAID = new AcoustID_APIResponse(
+                                Results: new List<AcoustID_APIResponse.Result>()
+                                {
+                                    new AcoustID_APIResponse.Result(
+                                        entry.AcoustID,
+                                        entry.MatchingScore,
+                                        new List<AcoustID_APIResponse.Recording>()
+                                        {
+                                            new AcoustID_APIResponse.Recording(entry.RecordingID)
+                                        }
+                                    )
+                                },
+                                Status: "ok",
+                                QueryError: null
+                            );
+                        }
+                        else
+                        {
+                            await _dbContext.AcoustIDs.AddAsync(new AcoustIDStorage()
+                            {
+                                Hash = fpHash,
+                                AcoustID = mostScoredResult.AcoustID_ID,
+                                Duration = query.DurationInSeconds,
+                                MatchingScore = mostScoredResult.MatchScore,
+                                RecordingID = mostScoredRecordingId
+                            });
+                        }
+
+                        await _dbContext.SaveChangesAsync();
+                        
+                        // A slippery moment here: if the score is low, the result will still
+                        // be stored in a database, no matter the user constraints. And further
+                        // requests which would appear more similar to the actually true value
+                        // of the fingerprint, will be not alike with the stored result, but
+                        // would actually be more alike with the actual result.
+                        // 
+                        // upd: solved: update the database with more relevant results
+                        
+                        
+                        // finally, check the acquired matching score
+                        if (mostScoredResult.MatchScore < query.MatchingRate)
+                        {
+                            // couldn't satisfy client's needs
+                            snapAID = null;
+                        }
+                    }
                 }
             }
             
