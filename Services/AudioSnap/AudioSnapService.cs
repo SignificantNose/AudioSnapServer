@@ -15,18 +15,18 @@ public class AudioSnapService : IAudioSnapService
 {
     private enum MusicBrainzEntry
     {
-        E_Recording,
-        E_Release
+        ERecording,
+        ERelease
     };
 
     private record class MusicBrainzQuery(
         string Entry, string Parameters);
 
-    private static readonly Dictionary<MusicBrainzEntry, MusicBrainzQuery> _queryParameters =
-        new Dictionary<MusicBrainzEntry,MusicBrainzQuery>()
+    private static readonly Dictionary<MusicBrainzEntry, MusicBrainzQuery> QueryParameters =
+        new()
         {
-            { MusicBrainzEntry.E_Recording, new MusicBrainzQuery("recording", "artist-credits+isrcs+releases+url-rels+genres+release-groups+discids") },
-            { MusicBrainzEntry.E_Release, new MusicBrainzQuery("release", "artist-credits+labels+discids+recordings+url-rels") }
+            { MusicBrainzEntry.ERecording, new MusicBrainzQuery("recording", "artist-credits+isrcs+releases+url-rels+genres+release-groups+discids") },
+            { MusicBrainzEntry.ERelease, new MusicBrainzQuery("release", "artist-credits+labels+discids+recordings+url-rels") }
         };
     
     private ExternalAPIClientOptions _options;
@@ -60,7 +60,6 @@ public class AudioSnapService : IAudioSnapService
     /// </summary>
     public void SetNeededComponents(IEnumerable<string> searchParameters)
     {
-        // analyze properties to include
         _audioSnap = new AudioSnap();
         
         ErrorMessage = "";
@@ -83,22 +82,13 @@ public class AudioSnapService : IAudioSnapService
         }
         
         // adjust needed components
-        _neededComponents = AudioSnap.AdjustNC(_neededComponents);
+        _neededComponents = AudioSnap.AdjustNeededComponents(_neededComponents);
     }
     
     private void DetermineMissingProperties()
     {
         // analyzing the retrieved components, then forming the list
         // of values that actually can be retrieved from the snap
-
-        // List<string> missingProperties = new List<string>();
-        // missingProperties.AddRange(validProperties.Where(property =>
-        // {
-        // byte currMask = AudioSnap.PropertyMappings[property].Mask;
-        // return (currMask != AudioSnap.NC_SPECIALPRESENT &&
-        // (retrievedComponents & currMask) == 0);
-        // }));
-        // validProperties.RemoveAll(property => missingProperties.Contains(property));
         
         foreach (string property in _audioSnap.ValidProperties)
         {
@@ -121,13 +111,13 @@ public class AudioSnapService : IAudioSnapService
         if (_audioSnap.ValidProperties.Remove("image-link"))
         {
             // find it and assign a value
-            _audioSnap.RESIMGLINK = _audioSnap.CoverArtArchiveResponse.Images[0].Thumbnails.Link250px;
+            _audioSnap.ImageLink = _audioSnap.CoverArtArchiveResponse.Images[0].Thumbnails.Link250px;
         }
 
         if (_audioSnap.ValidProperties.Remove("external-links"))
         { 
             // find it and assign a value
-            _audioSnap.RESEXTLINKS = _audioSnap.ReleaseResponse.ReleaseRelations.Select(rr => rr.url.Resource).ToList();
+            _audioSnap.ExternalLinks = _audioSnap.ReleaseResponse.ReleaseRelations.Select(rr => rr.url.Resource).ToList();
         }
 
         
@@ -300,8 +290,8 @@ public class AudioSnapService : IAudioSnapService
             }
             else
             {
-                MusicBrainzEntry entry = MusicBrainzEntry.E_Recording;
-                MusicBrainzQuery queryParams = _queryParameters[entry];
+                MusicBrainzEntry entry = MusicBrainzEntry.ERecording;
+                MusicBrainzQuery queryParams = QueryParameters[entry];
                 snapMBRecording = await QueryAPI<MusicBrainz_APIResponse>(
                     "musicbrainz",
                     APIQueryBuilder.Q_MusicBrainz(
@@ -403,8 +393,8 @@ public class AudioSnapService : IAudioSnapService
             }
             else
             {
-                MusicBrainzEntry entry = MusicBrainzEntry.E_Release; 
-                MusicBrainzQuery queryParams = _queryParameters[entry];
+                MusicBrainzEntry entry = MusicBrainzEntry.ERelease; 
+                MusicBrainzQuery queryParams = QueryParameters[entry];
                 snapMBRelease = await QueryAPI<MusicBrainz_APIResponse>(
                     "musicbrainz", 
                     APIQueryBuilder.Q_MusicBrainz(

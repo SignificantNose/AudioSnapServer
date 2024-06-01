@@ -30,17 +30,17 @@ public class AudioSnapJsonConverter : JsonConverter<AudioSnap>
         writer.WriteEndObject();
         
         // 2. ["external-links"] : [...]
-        if (value.RESEXTLINKS!=null)
+        if (value.ExternalLinks!=null)
         {
             writer.WritePropertyName("external-links");
-            JsonSerializer.Serialize(writer, value.RESEXTLINKS);
+            JsonSerializer.Serialize(writer, value.ExternalLinks);
         }
 
         // 3. ["image-link"] : ...
         // not a fan of ToString tbh
-        if (value.RESIMGLINK != null) 
+        if (value.ImageLink != null) 
         {
-            writer.WriteString("image-link", value.RESIMGLINK.ToString());
+            writer.WriteString("image-link", value.ImageLink.ToString());
         }
         
         // 4. ["missing-properties"] : [...]

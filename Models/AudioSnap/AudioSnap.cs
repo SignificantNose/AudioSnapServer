@@ -35,6 +35,7 @@ public class AudioSnap
         Func<AudioSnap, object> GetMappedValue,
         byte Mask
     );
+    
     public static readonly Dictionary<string, Mapping> PropertyMappings = 
         new()
         {
@@ -49,7 +50,7 @@ public class AudioSnap
         {"length", new Mapping(snap => snap.RecordingResponse.LengthMs,NC_MB_RECORDINGRESPONSE)},
         {"acoustid", new Mapping(snap => snap.AcoustIDResponse.Results[0].AcoustID_ID,NC_AID_RESPONSE)},
         {"music-brainz-artist-id", new Mapping(snap => string.Join("; ", snap.ChosenTrack.ArtistCredits.Select(ac => ac.Artist.Id)),NC_MB_CHOSENTRACK)},
-        {"music-brainz-disc-id", new Mapping(snap => snap.MusicBrainzDiscId, NC_SPECIALPRESENT)},
+        {"music-brainz-disc-id", new Mapping(snap => snap.MusicBrainzDiscID, NC_SPECIALPRESENT)},
         {"music-brainz-recording-id", new Mapping(snap => snap.RecordingID,NC_MB_RECORDINGID)},
         {"music-brainz-release-id", new Mapping(snap => snap.RecordingPrioritizedRelease.Id,NC_MB_RECPRIORITIZEDRELEASE)},
         {"music-brainz-release-status", new Mapping(snap => snap.RecordingPrioritizedRelease.Status,NC_MB_RECPRIORITIZEDRELEASE)},
@@ -59,68 +60,70 @@ public class AudioSnap
         {"title", new Mapping(snap => snap.RecordingResponse.Title,NC_MB_RECORDINGRESPONSE)},
         {"year", new Mapping(snap => DateTime.Parse(snap.RecordingPrioritizedRelease.ReleaseGroup.FirstReleaseDate).Year,NC_MB_RECPRIORITIZEDRELEASE)},
         
-        {"external-links", new Mapping(snap=>snap.RESEXTLINKS, NC_MB_RELEASERESPONSE)},
-        {"image-link", new Mapping(snap=>snap.RESIMGLINK, NC_CAA_RESPONSE)}
+        {"external-links", new Mapping(snap=>snap.ExternalLinks, NC_MB_RELEASERESPONSE)},
+        {"image-link", new Mapping(snap=>snap.ImageLink, NC_CAA_RESPONSE)}
     };
 
 
     public HashSet<string> ValidProperties = new HashSet<string>();
     public HashSet<string> InvalidProperties = new HashSet<string>();
     public HashSet<string> MissingProperties = new HashSet<string>();
-    // public string ExternalLinks = "";
-    // public string ImageLink = "";
     
     
-    public int Disc { get; set; } = 1;
-    public int DiscCount { get; set; } = 1;
-    public string MusicBrainzDiscId = "";
+    // disc
+    public int Disc = 1;
     
-
-    // snap=>snap.ReleaseResponse.ReleaseRelations.Select(rr => rr.url.Resource)
-    public List<Uri>? RESEXTLINKS = null;
-    // snap=>snap.CoverArtArchiveResponse.Images[0].Thumbnails.Link250px
-    public Uri? RESIMGLINK = null;
-
+    // disc-count
+    public int DiscCount = 1;
+    
+    // music-brainz-disc-id
+    public string MusicBrainzDiscID = "";
+    
+    // external-links
+    public List<Uri>? ExternalLinks = null;
+    
+    // image-link
+    public Uri? ImageLink = null;
+  
     
     
     
     
     // acoustid
-    public AcoustID_APIResponse AcoustIDResponse;
+    public AcoustID_APIResponse? AcoustIDResponse = null;
     
     // music-brainz-recording-id
-    public string RecordingID;
-
+    public string? RecordingID = null;
     
     
     // isrcs, length, title
-    public MusicBrainz_APIResponse RecordingResponse;
+    public MusicBrainz_APIResponse? RecordingResponse = null;
     
     // Release chosen based on a set of priorities
     //
     // album, album-artists, album-artists-sort, year,
     // music-brainz-release-id, music-brainz-release-status
-    public MusicBrainz_APIResponse.Release RecordingPrioritizedRelease;
+    public MusicBrainz_APIResponse.Release? RecordingPrioritizedRelease = null;
     
     // A Media element from a prioritized release. Defaults to
     // the first element of media (if it exists at all)
     //
     // track-1, track-count
-    public MusicBrainz_APIResponse.Media ReleaseMedia;
+    public MusicBrainz_APIResponse.Media? ReleaseMedia = null;
     
     
     // external-links
-    public MusicBrainz_APIResponse ReleaseResponse;
+    public MusicBrainz_APIResponse? ReleaseResponse = null;
     // Track acquired from list of the Release response
     // based on an offset
     //
     // artists, genres, track-id, music-brainz-artist-id
-    public MusicBrainz_APIResponse.Track ChosenTrack;
+    public MusicBrainz_APIResponse.Track? ChosenTrack = null;
     
     
     
     // image-link (for now return 250px, then adjust to query needs)
-    public CoverArtArchive_APIResponse CoverArtArchiveResponse;
+    public CoverArtArchive_APIResponse? CoverArtArchiveResponse = null;
     
     
 
@@ -134,7 +137,7 @@ public class AudioSnap
     /// </summary>
     /// <param name="components"></param>
     /// <returns></returns>
-    public static byte AdjustNC(byte components)
+    public static byte AdjustNeededComponents(byte components)
     {
         // A magic trick could've been computed on
         // this structure by taking the MSB and 
