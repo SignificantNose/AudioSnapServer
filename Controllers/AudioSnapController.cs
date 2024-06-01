@@ -24,35 +24,13 @@ public class AudioSnapController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> SnapFingerprint(AudioSnapClientQuery query)
     {
-        AudioSnap? snap = _snapService.GetSnapByHash();
-        if (snap == null)
-        {
-            // calculate the snap, get all the required data and save it
-            snap = await _snapService.GetSnapByFingerprint(query);
-            // _snapService.SaveSnap();
-        }
-
-        string res = "";
-        if (snap != null)
-        {
-            // custom serialize
-
-            JsonSerializerOptions options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Converters =
-                {
-                    new AudioSnapJsonConverter(
-                        snap.response.ValidProperties.ToList()
-                    )
-                }
-            };
-            res = JsonSerializer.Serialize(snap, options);
-        }
-
-        // TODO: Make the external-links and image-link outside of the properties object
+        // AudioSnap? snap = await _snapService.GetSnapByFingerprint(query);
+        _snapService.SetNeededComponents(query.ReleaseProperties);
+        await _snapService.CalculateSnap(query);
+        string res = _snapService.GetSerializedResponse();
+        
         
         return Content(res,"application/json");
-        return Ok(snap);
+        // return Ok(snap);
     }
 }

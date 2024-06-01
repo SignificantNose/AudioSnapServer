@@ -3,7 +3,8 @@ using AudioSnapServer.Models;
 
 public interface IAudioSnapService
 {
-    AudioSnap? GetSnapByHash();
-    Task<AudioSnap?> GetSnapByFingerprint(AudioSnapClientQuery query);
-    void SaveSnap();
+    void SetNeededComponents(IEnumerable<string> searchParameters);
+    Task<bool> CalculateSnap(AudioSnapClientQuery query);
+    string GetSerializedResponse();
+
 }

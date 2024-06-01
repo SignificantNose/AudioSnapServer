@@ -43,48 +43,137 @@ public class AudioSnapService : IAudioSnapService
         _logger = logger;
         _dbContext = dbContext;
     }
-
-    public AudioSnap? GetSnapByHash()
-    {
-        return null;
-    }
     
-    public async Task<AudioSnap?> GetSnapByFingerprint(AudioSnapClientQuery query)
+    
+    // how convenient would've this been if typedef existed
+    private byte _neededComponents = 0;
+    private byte _retrievedComponents = 0;
+    private AudioSnap _audioSnap;
+    
+    public string ErrorMessage { get; private set; } = "";
+
+
+    /// <summary>
+    /// Analyzes the needed components list and distinguishes which
+    /// of the properties current implementation of the service can
+    /// retrieve, preparing to work with <see cref="CalculateSnap"/>
+    /// </summary>
+    public void SetNeededComponents(IEnumerable<string> searchParameters)
     {
-        AudioSnap snap = new AudioSnap();
-        snap.response = new SnapUserResponseData();
-        
         // analyze properties to include
+        _audioSnap = new AudioSnap();
         
-        HashSet<string> validProperties = new HashSet<string>();
-        HashSet<string> invalidProperties = new HashSet<string>();
+        ErrorMessage = "";
+        _neededComponents = 0;
+        _retrievedComponents = 0;
         
-        // how convenient would've this been if typedef existed
-        byte neededComponents = 0;
-        foreach (string queryProperty in query.ReleaseProperties)
+        foreach (string queryProperty in searchParameters)
         {
             if (AudioSnap.PropertyMappings.Keys.Contains(queryProperty))
             {
-                validProperties.Add(queryProperty);
+                _audioSnap.ValidProperties.Add(queryProperty);
                 byte currMask = AudioSnap.PropertyMappings[queryProperty].Mask;
                 if(currMask!=AudioSnap.NC_SPECIALPRESENT)
-                    neededComponents |= AudioSnap.PropertyMappings[queryProperty].Mask;
+                    _neededComponents |= AudioSnap.PropertyMappings[queryProperty].Mask;
             }
             else
             {
-                invalidProperties.Add(queryProperty);
+                _audioSnap.InvalidProperties.Add(queryProperty);
             }
         }
         
         // adjust needed components
-        neededComponents = AudioSnap.AdjustNC(neededComponents);
+        _neededComponents = AudioSnap.AdjustNC(_neededComponents);
+    }
+    
+    private void DetermineMissingProperties()
+    {
+        // analyzing the retrieved components, then forming the list
+        // of values that actually can be retrieved from the snap
+
+        // List<string> missingProperties = new List<string>();
+        // missingProperties.AddRange(validProperties.Where(property =>
+        // {
+        // byte currMask = AudioSnap.PropertyMappings[property].Mask;
+        // return (currMask != AudioSnap.NC_SPECIALPRESENT &&
+        // (retrievedComponents & currMask) == 0);
+        // }));
+        // validProperties.RemoveAll(property => missingProperties.Contains(property));
         
+        foreach (string property in _audioSnap.ValidProperties)
+        {
+            byte currMask = AudioSnap.PropertyMappings[property].Mask;
+            if (currMask != AudioSnap.NC_SPECIALPRESENT &&
+                (_retrievedComponents & currMask) == 0)
+            {
+                _audioSnap.MissingProperties.Add(property);
+            }
+        }
+
+        _audioSnap.ValidProperties.Except(_audioSnap.MissingProperties);
+    }
+
+    public string GetSerializedResponse()
+    {
+        DetermineMissingProperties();
+
+        // process image links and ext links
+        if (_audioSnap.ValidProperties.Remove("image-link"))
+        {
+            // find it and assign a value
+            _audioSnap.RESIMGLINK = _audioSnap.CoverArtArchiveResponse.Images[0].Thumbnails.Link250px;
+        }
+
+        if (_audioSnap.ValidProperties.Remove("external-links"))
+        { 
+            // find it and assign a value
+            _audioSnap.RESEXTLINKS = _audioSnap.ReleaseResponse.ReleaseRelations.Select(rr => rr.url.Resource).ToList();
+        }
+
         
+        JsonSerializerOptions options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Converters =
+            {
+                new AudioSnapJsonConverter()
+            }
+        };
+        
+        string res = JsonSerializer.Serialize(_audioSnap, options);
+
+        return res;
+    }
+
+    public void SetNecessaryComponents(IEnumerable<string> searchParameters)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Query the database and different APIs based on the
+    /// needed components set in the bit-based value,
+    /// calculated in <see cref="SetNeededComponents"/>
+    /// </summary>
+    /// <returns>
+    /// True on success (<see cref="GetSerializedResponse"/> can be called succesfully),
+    /// false on error (see <see cref="ErrorMessage"/> property for more details on the error)</returns>
+    /// <remarks>
+    /// In this case an error is considered something that normally
+    /// shouldn't happen in normal recognition process, like receiving
+    /// empty response, or not receiving any response at all. It must
+    /// be distunguished from the cases where a property is not found
+    /// (well, except for AcoustID response case, where there's literally
+    /// nothing that can be found, so in that case return "track not found"
+    /// as if the track is not known)
+    /// </remarks>
+    public async Task<bool> CalculateSnap(AudioSnapClientQuery query){
+        bool status = true;
         // find the components
         
         // 1. AcoustID response
-        byte retrievedComponents = 0;
-        if ((neededComponents & AudioSnap.NC_AID_RESPONSE) != 0)
+        _retrievedComponents = 0;
+        if ((_neededComponents & AudioSnap.NC_AID_RESPONSE) != 0)
         {
             // calculate the hash
             byte[] acquiredData = ChromaBase64.ByteEncoding.GetBytes(query.Fingerprint);
@@ -125,16 +214,16 @@ public class AudioSnapService : IAudioSnapService
             else
             {
                 snapAID = await QueryAPI<AcoustID_APIResponse>
-                    ("acoustid", 
-                        FormQuery_AcoustID(_options.AcoustIDKey, query.DurationInSeconds, query.Fingerprint));
+                ("acoustid",
+                    APIQueryBuilder.Q_AcoustID(_options.AcoustIDKey, query.DurationInSeconds, query.Fingerprint));
                 if (snapAID == null || 
                     snapAID.Status!="ok" || 
                     snapAID.Results.Count<1 )
                 {
                     // TODO: Provide meaningful error messages
                     snapAID = null;
-                    snap.response.Status = false;
-                    snap.response.ErrorMessage = "AcoustID error: failed to retrieve proper response";
+                    if (status) ErrorMessage = "AcoustID error: failed to retrieve proper response";
+                    status = false;
                 }
                 else
                 {
@@ -154,8 +243,8 @@ public class AudioSnapService : IAudioSnapService
             
             if(snapAID!=null)
             {
-                snap.AcoustIDResponse = snapAID;
-                retrievedComponents |= AudioSnap.NC_AID_RESPONSE;
+                _audioSnap.AcoustIDResponse = snapAID;
+                _retrievedComponents |= AudioSnap.NC_AID_RESPONSE;
             }
             
         }
@@ -173,34 +262,34 @@ public class AudioSnapService : IAudioSnapService
         // I'm checking the easily-acquirable value, even if it is
         // not needed, so that if any errors related to incorrect
         // mapping of properties come up
-        if ((neededComponents & AudioSnap.NC_MB_RECORDINGID) != 0 &&
-            (retrievedComponents & AudioSnap.NC_AID_RESPONSE) != 0)
+        if ((_neededComponents & AudioSnap.NC_MB_RECORDINGID) != 0 &&
+            (_retrievedComponents & AudioSnap.NC_AID_RESPONSE) != 0)
         {
-            if (snap.AcoustIDResponse.Results[0].Recordings.Count < 1)
+            if (_audioSnap.AcoustIDResponse.Results[0].Recordings.Count < 1)
             {
-                snap.response.Status = false;
-                snap.response.ErrorMessage = "No recordings were found in AcoustID response";
+                if (status) ErrorMessage = "No recordings were found in AcoustID response";
+                status = false;
             }
             else
             {
                 // choose the recording with the most score 
                 // (assuming that it's the first one in the list)
                 // TODO: check if the recording with the largest score really is the first one
-                snap.RecordingID = snap.AcoustIDResponse.Results[0].Recordings[0].RecordingID;
-                retrievedComponents |= AudioSnap.NC_MB_RECORDINGID;
+                _audioSnap.RecordingID = _audioSnap.AcoustIDResponse.Results[0].Recordings[0].RecordingID;
+                _retrievedComponents |= AudioSnap.NC_MB_RECORDINGID;
             }
         }
         
         // 3. MusicBrainz Recording Response
-        if ((neededComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0 &&
-            (retrievedComponents & AudioSnap.NC_MB_RECORDINGID)!=0)
+        if ((_neededComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0 &&
+            (_retrievedComponents & AudioSnap.NC_MB_RECORDINGID)!=0)
         {
             //if(recordingID is not present in the database already)
             MusicBrainz_APIResponse? snapMBRecording = null;
 
             IQueryable<RecordingStorage> dbQuery =
                 from e in _dbContext.Recordings
-                where e.RecordingID == snap.RecordingID
+                where e.RecordingID == _audioSnap.RecordingID
                 select e;
             
             RecordingStorage? dbMBRecording = dbQuery.FirstOrDefault(); 
@@ -215,23 +304,23 @@ public class AudioSnapService : IAudioSnapService
                 MusicBrainzQuery queryParams = _queryParameters[entry];
                 snapMBRecording = await QueryAPI<MusicBrainz_APIResponse>(
                     "musicbrainz",
-                    FormQuery_MusicBrainz(
+                    APIQueryBuilder.Q_MusicBrainz(
                         queryParams.Entry,
-                        snap.RecordingID,
+                        _audioSnap.RecordingID,
                         queryParams.Parameters
                     )
                     );
                 if (snapMBRecording == null)
                 {
                     // TODO: make reasonable error messages
-                    snap.response.Status = false;
-                    snap.response.ErrorMessage = "MusicBrainz error: response is null for recording query";
+                    if(status) ErrorMessage = "MusicBrainz error: response is null for recording query";
+                    status = false;
                 }
                 else
                 {
                     await _dbContext.Recordings.AddAsync(new RecordingStorage()
                     {
-                        RecordingID = snap.RecordingID,
+                        RecordingID = _audioSnap.RecordingID,
                         RecordingResponse = JsonSerializer.Serialize(snapMBRecording)
                     });
                     await _dbContext.SaveChangesAsync();
@@ -240,52 +329,52 @@ public class AudioSnapService : IAudioSnapService
 
             if (snapMBRecording != null)
             {
-                retrievedComponents |= AudioSnap.NC_MB_RECORDINGRESPONSE;
-                snap.RecordingResponse = snapMBRecording;
+                _retrievedComponents |= AudioSnap.NC_MB_RECORDINGRESPONSE;
+                _audioSnap.RecordingResponse = snapMBRecording;
             }
         }
 
         // 4. Choosing prioritized release
-        if ((neededComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0 &&
-            (retrievedComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0)
+        if ((_neededComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0 &&
+            (_retrievedComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0)
         {
-            if (snap.RecordingResponse.Releases.Count < 1)
+            if (_audioSnap.RecordingResponse.Releases.Count < 1)
             {
-                snap.response.Status = false;
-                snap.response.ErrorMessage = "No releases were found in MusicBrainz response on recording query";
+                if (status) ErrorMessage = "No releases were found in MusicBrainz response on recording query";
+                status = false;
             }
             else
             {
                 // applying preferences
                 // (for now, choose first releaseID found)
-                retrievedComponents |= AudioSnap.NC_MB_RECPRIORITIZEDRELEASE;
-                snap.RecordingPrioritizedRelease = snap.RecordingResponse.Releases[0];
+                _retrievedComponents |= AudioSnap.NC_MB_RECPRIORITIZEDRELEASE;
+                _audioSnap.RecordingPrioritizedRelease = _audioSnap.RecordingResponse.Releases[0];
             }
         }
 
         // 5. Validating release media component
-        if ((neededComponents & AudioSnap.NC_MB_RELEASEMEDIA) != 0 &&
-            (retrievedComponents & AudioSnap.NC_MB_RECORDINGRESPONSE)!=0)
+        if ((_neededComponents & AudioSnap.NC_MB_RELEASEMEDIA) != 0 &&
+            (_retrievedComponents & AudioSnap.NC_MB_RECORDINGRESPONSE)!=0)
         {
             // default to first media component
-            if (snap.RecordingPrioritizedRelease.Media.Count < 1)
+            if (_audioSnap.RecordingPrioritizedRelease.Media.Count < 1)
             {
-                snap.response.Status = false;
-                snap.response.ErrorMessage = "No media content found in prioritized release";
+                if (status) ErrorMessage = "No media content found in prioritized release";
+                status = false;
             }
             else
             {
-                retrievedComponents |= AudioSnap.NC_MB_RELEASEMEDIA;
-                snap.ReleaseMedia = snap.RecordingPrioritizedRelease.Media[0];
+                _retrievedComponents |= AudioSnap.NC_MB_RELEASEMEDIA;
+                _audioSnap.ReleaseMedia = _audioSnap.RecordingPrioritizedRelease.Media[0];
             }
         }
         
         
         // 6. Release response
-        if ((neededComponents & AudioSnap.NC_MB_RELEASERESPONSE) != 0 &&
-            (retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
+        if ((_neededComponents & AudioSnap.NC_MB_RELEASERESPONSE) != 0 &&
+            (_retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
         {
-            string preferredReleaseID = snap.RecordingPrioritizedRelease.Id;
+            string preferredReleaseID = _audioSnap.RecordingPrioritizedRelease.Id;
             // if(releaseID is not present in the database already)
 
             MusicBrainz_APIResponse? snapMBRelease = null;
@@ -305,7 +394,10 @@ public class AudioSnapService : IAudioSnapService
                 {
                     // error occurred: release comes before coverartarchive
                     // response, and is created firstly
-                    _logger.LogError("Database response on release has null release response field, which shouldn't happen.");
+                    string msg = "Database response on release has null release response field, which shouldn't happen.";
+                    _logger.LogError(msg);
+                    if (status) ErrorMessage = msg;
+                    status = false;
                 }
 
             }
@@ -315,7 +407,7 @@ public class AudioSnapService : IAudioSnapService
                 MusicBrainzQuery queryParams = _queryParameters[entry];
                 snapMBRelease = await QueryAPI<MusicBrainz_APIResponse>(
                     "musicbrainz", 
-                    FormQuery_MusicBrainz(
+                    APIQueryBuilder.Q_MusicBrainz(
                         queryParams.Entry,
                         preferredReleaseID,
                         queryParams.Parameters
@@ -325,8 +417,8 @@ public class AudioSnapService : IAudioSnapService
                 if (snapMBRelease == null)
                 {
                     // TODO: make reasonable error messages
-                    snap.response.Status = false;
-                    snap.response.ErrorMessage = "MusicBrainz error: response is null for release query";
+                    if (status) ErrorMessage = "MusicBrainz error: response is null for release query";
+                    status = false;
                 }
                 else
                 {
@@ -343,36 +435,36 @@ public class AudioSnapService : IAudioSnapService
 
             if (snapMBRelease != null)
             {
-                retrievedComponents |= AudioSnap.NC_MB_RELEASERESPONSE;
-                snap.ReleaseResponse = snapMBRelease;
+                _retrievedComponents |= AudioSnap.NC_MB_RELEASERESPONSE;
+                _audioSnap.ReleaseResponse = snapMBRelease;
             }
 
         }
         
         // 7. Choosing the track
-        if ((neededComponents & AudioSnap.NC_MB_CHOSENTRACK) != 0 &&
-            (retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
+        if ((_neededComponents & AudioSnap.NC_MB_CHOSENTRACK) != 0 &&
+            (_retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
         {
             // defaulting to 0th release media component
-            if (snap.ReleaseResponse.ReleaseMedia.Count < 1)
+            if (_audioSnap.ReleaseResponse.ReleaseMedia.Count < 1)
             {
-                snap.response.Status = false;
-                snap.response.ErrorMessage = "No media components were found in release response";
+                if (status) ErrorMessage = "No media components were found in release response";
+                status = false;
             }
             else
             {
                 // the Tracks list is expected to have at least offset+1 tracks
-                snap.ChosenTrack = snap.ReleaseResponse.ReleaseMedia[0].Tracks[snap.ReleaseMedia.TrackOffset];
-                retrievedComponents |= AudioSnap.NC_MB_CHOSENTRACK;
+                _audioSnap.ChosenTrack = _audioSnap.ReleaseResponse.ReleaseMedia[0].Tracks[_audioSnap.ReleaseMedia.TrackOffset];
+                _retrievedComponents |= AudioSnap.NC_MB_CHOSENTRACK;
             }
         }
         
         // 8. Retrieving cover art
-        if ((neededComponents & AudioSnap.NC_CAA_RESPONSE) != 0 &&
-            (retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
+        if ((_neededComponents & AudioSnap.NC_CAA_RESPONSE) != 0 &&
+            (_retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
         {
             CoverArtArchive_APIResponse? snapCAA = null;
-            string preferredReleaseID = snap.RecordingPrioritizedRelease.Id;
+            string preferredReleaseID = _audioSnap.RecordingPrioritizedRelease.Id;
 
             IQueryable<CoverArtDBResponse> dbQuery =
                 from e in _dbContext.Releases
@@ -385,9 +477,13 @@ public class AudioSnapService : IAudioSnapService
                 // error occurred. do not continue
                 // the cover art requires to have some kind of info about the 
                 // release
-                _logger.LogError("Database response for CoverArtArchive response is null, " +
-                                 "which shouldn't happen as CAA response must be available once " +
-                                 "the release is known after recording response");
+                string msg = "Database response for CoverArtArchive response is null, " +
+                             "which shouldn't happen as CAA response must be available once " +
+                             "the release is known after recording response";
+                _logger.LogError(msg);
+                if (status)
+                    ErrorMessage = msg;
+                status = false;
             }
             else
             {
@@ -400,12 +496,12 @@ public class AudioSnapService : IAudioSnapService
                 {
                     snapCAA = await QueryAPI<CoverArtArchive_APIResponse>(
                         "coverartarchive",
-                        FormQuery_CoverArtArchive(preferredReleaseID)
+                        APIQueryBuilder.Q_CoverArtArchive(preferredReleaseID)
                         );
                     if (snapCAA == null)
-                    {
-                        snap.response.Status = false;
-                        snap.response.ErrorMessage = "No media components were found in release response";
+                    { 
+                        if (status) ErrorMessage = "No media components were found in release response";
+                        status = false;
                     }
                     else
                     {
@@ -416,53 +512,20 @@ public class AudioSnapService : IAudioSnapService
                         await _dbContext.SaveChangesAsync();
                     }
                 }
-
             }
 
             if (snapCAA != null)
             {
-                snap.CoverArtArchiveResponse = snapCAA;
-                retrievedComponents |= AudioSnap.NC_CAA_RESPONSE;
+                _audioSnap.CoverArtArchiveResponse = snapCAA;
+                _retrievedComponents |= AudioSnap.NC_CAA_RESPONSE;
             }
         }
         
-        // analyzing the retrieved components, then forming the list
-        // of values that actually can be retrieved from the snap
-
-        // List<string> missingProperties = new List<string>();
-        // missingProperties.AddRange(validProperties.Where(property =>
-        // {
-            // byte currMask = AudioSnap.PropertyMappings[property].Mask;
-            // return (currMask != AudioSnap.NC_SPECIALPRESENT &&
-                    // (retrievedComponents & currMask) == 0);
-        // }));
-        // validProperties.RemoveAll(property => missingProperties.Contains(property));
         
-        HashSet<string> missingProperties = new HashSet<string>();
-        foreach (string property in validProperties)
-        {
-            byte currMask = AudioSnap.PropertyMappings[property].Mask;
-            if (currMask != AudioSnap.NC_SPECIALPRESENT &&
-                (retrievedComponents & currMask) == 0)
-            {
-                missingProperties.Add(property);
-            }
-        }
-
-        validProperties.Except(missingProperties);
-
-        // filling in the response
-        snap.response.InvalidProperties = invalidProperties;
-        snap.response.MissingProperties = missingProperties;
-        snap.response.ValidProperties = validProperties;
-        return snap;
+        
+        return status;
     }
-
-    public void SaveSnap()
-    {
-        throw new NotImplementedException();
-    }
-
+    
 
     private async Task<API_Response?> QueryAPI<API_Response>(string httpClientName, string QueryUri)
     {
@@ -492,29 +555,5 @@ public class AudioSnapService : IAudioSnapService
         }
 
         return typedResponse;
-    }
-
-    /// <summary>
-    /// Form a query string to AcoustID API that expects to receive only recording IDs
-    /// </summary>
-    private string FormQuery_AcoustID(string ClientKey, int duration, string fingerprint)
-    {
-        return $"lookup?client={ClientKey}&duration={duration}&fingerprint={fingerprint}&meta=recordingids&format=json";
-    }
-    
-    /// <summary>
-    /// Form a query string to MusicBrainz API service for a specific entry
-    /// </summary>
-    private string FormQuery_MusicBrainz(string entry, string entryID, string queryParams)
-    {
-        return $"{entry}/{entryID}?inc={queryParams}&fmt=json";
-    }
-
-    /// <summary>
-    /// Acquire Cover Art information for a release from CoverArtArchive API service
-    /// </summary>
-    private string FormQuery_CoverArtArchive(string releaseID)
-    {
-        return $"release/{releaseID}";
     }
 }

@@ -5,6 +5,10 @@ namespace AudioSnapServer.Models;
 public record class AudioSnapClientQuery(
     [property: JsonPropertyName("fingerprint")] string Fingerprint,
     [property: JsonPropertyName("duration")] int DurationInSeconds,
+    [property: JsonPropertyName("matching-rate")] double MatchingRate,
+    [property: JsonPropertyName("cover")] bool IncludeCover,
+    [property: JsonPropertyName("cover-size")] int MaxCoverSize,
+    [property: JsonPropertyName("external-links")] bool IncludeExternalLinks,
     [property: JsonPropertyName("priorities")] AudioSnapClientQuery.Priorities QueryPriorities,
     [property: JsonPropertyName("release-properties")] List<string> ReleaseProperties
 )

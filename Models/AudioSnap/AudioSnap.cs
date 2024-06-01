@@ -58,17 +58,32 @@ public class AudioSnap
         {"track-count", new Mapping(snap => snap.ReleaseMedia.TrackCount,NC_MB_RELEASEMEDIA)},
         {"title", new Mapping(snap => snap.RecordingResponse.Title,NC_MB_RECORDINGRESPONSE)},
         {"year", new Mapping(snap => DateTime.Parse(snap.RecordingPrioritizedRelease.ReleaseGroup.FirstReleaseDate).Year,NC_MB_RECPRIORITIZEDRELEASE)},
-        {"external-links", new Mapping(snap=>snap.ReleaseResponse.ReleaseRelations.Select(rr => rr.url.Resource), NC_MB_RELEASERESPONSE)},
-        {"image-link", new Mapping(snap=>snap.CoverArtArchiveResponse.Images[0].Thumbnails.Link250px, NC_CAA_RESPONSE)}
+        
+        {"external-links", new Mapping(snap=>snap.RESEXTLINKS, NC_MB_RELEASERESPONSE)},
+        {"image-link", new Mapping(snap=>snap.RESIMGLINK, NC_CAA_RESPONSE)}
     };
 
-    
+
+    public HashSet<string> ValidProperties = new HashSet<string>();
+    public HashSet<string> InvalidProperties = new HashSet<string>();
+    public HashSet<string> MissingProperties = new HashSet<string>();
+    // public string ExternalLinks = "";
+    // public string ImageLink = "";
     
     
     public int Disc { get; set; } = 1;
     public int DiscCount { get; set; } = 1;
     public string MusicBrainzDiscId = "";
+    
 
+    // snap=>snap.ReleaseResponse.ReleaseRelations.Select(rr => rr.url.Resource)
+    public List<Uri>? RESEXTLINKS = null;
+    // snap=>snap.CoverArtArchiveResponse.Images[0].Thumbnails.Link250px
+    public Uri? RESIMGLINK = null;
+
+    
+    
+    
     
     // acoustid
     public AcoustID_APIResponse AcoustIDResponse;
@@ -109,7 +124,6 @@ public class AudioSnap
     
     
 
-    public SnapUserResponseData response;
 
 
     /// <summary>
@@ -154,15 +168,4 @@ public class AudioSnap
 
         return components;
     }
-}
-
-public class SnapUserResponseData
-{
-    public HashSet<string> InvalidProperties;
-    public HashSet<string> MissingProperties;
-    public HashSet<string> ValidProperties;
-
-    public bool Status = true;
-    public string ErrorMessage = "";
-
 }
