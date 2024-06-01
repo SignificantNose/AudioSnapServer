@@ -3,8 +3,8 @@ using AudioSnapServer.Models;
 
 public interface IAudioSnapService
 {
-    void SetNeededComponents(IEnumerable<string> searchParameters);
+    void SetNeededComponents(AudioSnapClientQuery query);
     Task<bool> CalculateSnap(AudioSnapClientQuery query);
-    string GetSerializedResponse();
+    string GetSerializedResponse(int? maxImageSize);
 
 }

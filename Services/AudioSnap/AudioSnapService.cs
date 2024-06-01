@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using System.Reflection;
 using System.Text.Json;
 using AudioSnapServer.Data;
 using AudioSnapServer.Models.ResponseStorage;
@@ -58,7 +59,7 @@ public class AudioSnapService : IAudioSnapService
     /// of the properties current implementation of the service can
     /// retrieve, preparing to work with <see cref="CalculateSnap"/>
     /// </summary>
-    public void SetNeededComponents(IEnumerable<string> searchParameters)
+    public void SetNeededComponents(AudioSnapClientQuery query)
     {
         _audioSnap = new AudioSnap();
         
@@ -66,8 +67,12 @@ public class AudioSnapService : IAudioSnapService
         _neededComponents = 0;
         _retrievedComponents = 0;
         
-        foreach (string queryProperty in searchParameters)
+        if (query.IncludeCover) query.ReleaseProperties.Add("image-link");
+        if (query.IncludeExternalLinks) query.ReleaseProperties.Add("external-links");
+        
+        foreach (string queryProperty in query.ReleaseProperties)
         {
+
             if (AudioSnap.PropertyMappings.Keys.Contains(queryProperty))
             {
                 _audioSnap.ValidProperties.Add(queryProperty);
@@ -102,21 +107,30 @@ public class AudioSnapService : IAudioSnapService
 
         _audioSnap.ValidProperties.Except(_audioSnap.MissingProperties);
     }
-
-    public string GetSerializedResponse()
+    
+    public string GetSerializedResponse(int? maxImageSize)
     {
         DetermineMissingProperties();
 
         // process image links and ext links
         if (_audioSnap.ValidProperties.Remove("image-link"))
         {
-            // find it and assign a value
-            _audioSnap.ImageLink = _audioSnap.CoverArtArchiveResponse.Images[0].Thumbnails.Link250px;
+            CoverArtArchive_APIResponse.Image? img = _audioSnap.CoverArtArchiveResponse.Images.Where(img => img.Types.Contains("Front")).FirstOrDefault();
+            if (img == null)
+            {
+                _logger.LogError("ReleaseResponse responded that CAA has the front cover art," +
+                                 " while the image information has not been found in CAA response");
+            }
+            else
+            {
+                int desiredImgSize = maxImageSize ?? 500;
+                // _audioSnap.ImageLink = (Uri?)GetDesiredImageProperty(desiredImgSize).GetValue(img);
+                _audioSnap.ImageLink = GetDesiredImageLink(img, desiredImgSize);
+            }
         }
 
         if (_audioSnap.ValidProperties.Remove("external-links"))
         { 
-            // find it and assign a value
             _audioSnap.ExternalLinks = _audioSnap.ReleaseResponse.ReleaseRelations.Select(rr => rr.url.Resource).ToList();
         }
 
@@ -131,7 +145,6 @@ public class AudioSnapService : IAudioSnapService
         };
         
         string res = JsonSerializer.Serialize(_audioSnap, options);
-
         return res;
     }
 
@@ -217,13 +230,18 @@ public class AudioSnapService : IAudioSnapService
                 }
                 else
                 {
+                    if(snapAID.Results.Count!=1) _logger.LogInformation(
+                        $"AcoustID response with multiple results found: {JsonSerializer.Serialize(snapAID)}");
+                    
+                    AcoustID_APIResponse.Result result = snapAID.Results[0];
+                    var mostScoredRecordingId = result.Recordings.OrderByDescending(e => e.RecordingID).First().RecordingID;
                     await _dbContext.AcoustIDs.AddAsync(new AcoustIDStorage()
                     {
                         Hash = fpHash,
-                        AcoustID = snapAID.Results[0].AcoustID_ID,
+                        AcoustID = result.AcoustID_ID,
                         Duration = query.DurationInSeconds,
-                        MatchingScore = snapAID.Results[0].MatchScore,
-                        RecordingID = snapAID.Results[0].Recordings[0].RecordingID
+                        MatchingScore = result.MatchScore,
+                        RecordingID = mostScoredRecordingId
                     });
                     await _dbContext.SaveChangesAsync();
                 }
@@ -453,62 +471,66 @@ public class AudioSnapService : IAudioSnapService
         if ((_neededComponents & AudioSnap.NC_CAA_RESPONSE) != 0 &&
             (_retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
         {
-            CoverArtArchive_APIResponse? snapCAA = null;
-            string preferredReleaseID = _audioSnap.RecordingPrioritizedRelease.Id;
-
-            IQueryable<CoverArtDBResponse> dbQuery =
-                from e in _dbContext.Releases
-                where e.ReleaseID == preferredReleaseID
-                select new CoverArtDBResponse(e.ReleaseID, e.CoverResponse);
-
-            CoverArtDBResponse? dbCAA = dbQuery.FirstOrDefault();
-            if (dbCAA == null)
+            if (_audioSnap.ReleaseResponse.CAAInfo.IsFrontAvailable)
             {
-                // error occurred. do not continue
-                // the cover art requires to have some kind of info about the 
-                // release
-                string msg = "Database response for CoverArtArchive response is null, " +
-                             "which shouldn't happen as CAA response must be available once " +
-                             "the release is known after recording response";
-                _logger.LogError(msg);
-                if (status)
-                    ErrorMessage = msg;
-                status = false;
-            }
-            else
-            {
-                if (dbCAA.CoverArtJson != null)
+                CoverArtArchive_APIResponse? snapCAA = null;
+                string preferredReleaseID = _audioSnap.RecordingPrioritizedRelease.Id;
+
+                IQueryable<CoverArtDBResponse> dbQuery =
+                    from e in _dbContext.Releases
+                    where e.ReleaseID == preferredReleaseID
+                    select new CoverArtDBResponse(e.ReleaseID, e.CoverResponse);
+
+                CoverArtDBResponse? dbCAA = dbQuery.FirstOrDefault();
+                if (dbCAA == null)
                 {
-                    // take from db
-                    snapCAA = JsonSerializer.Deserialize<CoverArtArchive_APIResponse>(dbCAA.CoverArtJson);
+                    // error occurred. do not continue
+                    // the cover art requires to have some kind of info about the 
+                    // release
+                    string msg = "Database response for CoverArtArchive response is null, " +
+                                 "which shouldn't happen as CAA response must be available once " +
+                                 "the release is known after recording response";
+                    _logger.LogError(msg);
+                    if (status)
+                        ErrorMessage = msg;
+                    status = false;
                 }
                 else
                 {
-                    snapCAA = await QueryAPI<CoverArtArchive_APIResponse>(
-                        "coverartarchive",
-                        APIQueryBuilder.Q_CoverArtArchive(preferredReleaseID)
-                        );
-                    if (snapCAA == null)
-                    { 
-                        if (status) ErrorMessage = "No media components were found in release response";
-                        status = false;
+                    if (dbCAA.CoverArtJson != null)
+                    {
+                        // take from db
+                        snapCAA = JsonSerializer.Deserialize<CoverArtArchive_APIResponse>(dbCAA.CoverArtJson);
                     }
                     else
                     {
-                        string serializedCAA = JsonSerializer.Serialize(snapCAA);
-                        await _dbContext.Releases
-                            .Where(e => e.ReleaseID == preferredReleaseID)
-                            .ExecuteUpdateAsync(e => e.SetProperty(p => p.CoverResponse, serializedCAA));
-                        await _dbContext.SaveChangesAsync();
+                        snapCAA = await QueryAPI<CoverArtArchive_APIResponse>(
+                            "coverartarchive",
+                            APIQueryBuilder.Q_CoverArtArchive(preferredReleaseID)
+                            );
+                        if (snapCAA == null)
+                        { 
+                            if (status) ErrorMessage = "No media components were found in release response";
+                            status = false;
+                        }
+                        else
+                        {
+                            string serializedCAA = JsonSerializer.Serialize(snapCAA);
+                            await _dbContext.Releases
+                                .Where(e => e.ReleaseID == preferredReleaseID)
+                                .ExecuteUpdateAsync(e => e.SetProperty(p => p.CoverResponse, serializedCAA));
+                            await _dbContext.SaveChangesAsync();
+                        }
                     }
+                }
+
+                if (snapCAA != null)
+                {
+                    _audioSnap.CoverArtArchiveResponse = snapCAA;
+                    _retrievedComponents |= AudioSnap.NC_CAA_RESPONSE;
                 }
             }
 
-            if (snapCAA != null)
-            {
-                _audioSnap.CoverArtArchiveResponse = snapCAA;
-                _retrievedComponents |= AudioSnap.NC_CAA_RESPONSE;
-            }
         }
         
         
@@ -516,6 +538,31 @@ public class AudioSnapService : IAudioSnapService
         return status;
     }
     
+    private Uri GetDesiredImageLink(CoverArtArchive_APIResponse.Image img, int imgSize)
+    {
+        // string outerPropertyName = "Thumbnails";
+        // string propertyName;
+        Uri imgLink;
+        
+        switch (imgSize)
+        {
+            case < 500:
+                // propertyName = "Thumbnails.Link250px";
+                imgLink = img.Thumbnails.Link250px;
+                break;
+            case < 1200:
+                // propertyName = "Thumbnails.Link500px";
+                imgLink = img.Thumbnails.Link500px;
+                break;
+            default:
+                // propertyName = "Thumbnails.Link1200px";
+                imgLink = img.Thumbnails.Link1200px;
+                break;
+        }
+
+        // return typeof(CoverArtArchive_APIResponse.Image).GetProperty(propertyName);
+        return imgLink;
+    }
 
     private async Task<API_Response?> QueryAPI<API_Response>(string httpClientName, string QueryUri)
     {

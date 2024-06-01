@@ -29,7 +29,9 @@ public record class MusicBrainz_APIResponse(
     
     
     [property: JsonPropertyName("media")] List<MusicBrainz_APIResponse.Media> ReleaseMedia,
-    [property: JsonPropertyName("relations")] List<MusicBrainz_APIResponse.Relations> ReleaseRelations
+    [property: JsonPropertyName("relations")] List<MusicBrainz_APIResponse.Relations> ReleaseRelations,
+    [property: JsonPropertyName("cover-art-archive")] MusicBrainz_APIResponse.CoverArtArchiveInfo CAAInfo
+    
     )
 {
     public record class Release(
@@ -114,4 +116,9 @@ public record class MusicBrainz_APIResponse(
     public record class RelationUrl(
         [property: JsonPropertyName("resource")] Uri Resource
         );
+
+    // Only front cover will be avaliable in the response
+    public record CoverArtArchiveInfo(
+        [property: JsonPropertyName("front")] bool IsFrontAvailable);
+
 }

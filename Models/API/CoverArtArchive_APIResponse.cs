@@ -7,6 +7,7 @@ public record class CoverArtArchive_APIResponse(
 )
 {
     public record class Image(
+        [property: JsonPropertyName("types")] List<string> Types,
         [property: JsonPropertyName("image")] Uri OriginalImage,
         [property: JsonPropertyName("thumbnails")] ThumbnailLinks Thumbnails
     );
