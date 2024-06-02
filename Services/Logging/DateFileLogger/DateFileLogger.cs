@@ -31,12 +31,26 @@ public class DateFileLogger : ILogger
         // in case something eventually comes up
         if (IsEnabled(logLevel))
         {
-            using (StreamWriter fileWriter = new StreamWriter(_logFilePath, true))
+            string logTime = $"{DateTime.Now:MM/dd/yyyy HH:mm:ss zzz}";
+            string logContent = formatter(state, exception);
+            
+            // Fixed thread-safety (wow, logging isn't thread safe, alright).
+            // A bad example of making it, a better idea would've been to make
+            // some kind of buffer to store the messages and then flush it once
+            // the amount of messages achieved some kind of value (that way
+            // making file logging throttled), but  in this case I have no idea
+            // how to make a kind of singleton-ish storage of log messages (for
+            // different service requirements) that is able to be flushed at the
+            // end of the application life cycle
+            lock (typeof(DateFileLogger))
             {
-                fileWriter.WriteLine($"[ {DateTime.Now:MM/dd/yyyy HH:mm:ss zzz} ][ {logLevel} ]");
-                fileWriter.WriteLine(formatter(state, exception));
-                fileWriter.WriteLine();
-                fileWriter.Flush();
+                using (StreamWriter fileWriter = new StreamWriter(_logFilePath, true))
+                {
+                    fileWriter.WriteLine($"[ {logTime} ][ {logLevel} ]");
+                    fileWriter.WriteLine(logContent);
+                    fileWriter.WriteLine();
+                    fileWriter.Flush();
+                }
             }
         }
     }

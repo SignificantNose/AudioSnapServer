@@ -89,25 +89,22 @@ public class AudioSnapService : IAudioSnapService
     /// </summary>
     /// <returns>
     /// True on success (<see cref="GetSerializedResponse"/> can be called succesfully),
-    /// false on error (see <see cref="ErrorMessages"/> property for more details on the error)</returns>
-    /// <remarks>
-    /// In this case an error is considered something that normally
-    /// shouldn't happen in normal recognition process, like receiving
-    /// empty response, or not receiving any response at all. It must
-    /// be distunguished from the cases where a property is not found
-    /// (well, except for AcoustID response case, where there's literally
-    /// nothing that can be found, so in that case return "track not found"
-    /// as if the track is not known)
-    /// </remarks>
+    /// false on error (the fingerprint couldn't have been recognized)
+    /// </returns>
     public async Task<bool> CalculateSnapAsync(AudioSnapClientQuery query){
         _retrievedComponents = 0;
         ErrorMessages.Clear();
         string? returnStatus;
+        bool result = true;
         
         // find the components
         // 1. AcoustID response
         returnStatus = await QueryAcoustIDAsync(query);
-        if (returnStatus != null) ErrorMessages.Add(returnStatus);
+        if (returnStatus != null)
+        {
+            ErrorMessages.Add(returnStatus);
+            result = false;
+        }
 
         // 2. MusicBrainz recording ID
         returnStatus = await RetrieveRecordingIDAsync();
@@ -136,8 +133,13 @@ public class AudioSnapService : IAudioSnapService
         // 8. Retrieving cover art
         returnStatus = await QueryCoverArtArchiveAsync();
         if (returnStatus != null) ErrorMessages.Add(returnStatus);
-        
-        return ErrorMessages.Count>0;
+
+        foreach (string errorMsg in ErrorMessages)
+        {
+            _logger.LogError(errorMsg);
+        }
+
+        return result;
     }
     
     /// <summary>
@@ -157,7 +159,7 @@ public class AudioSnapService : IAudioSnapService
             CoverArtArchive_APIResponse.Image? img = _audioSnap.CoverArtArchiveResponse.Images.Where(img => img.Types.Contains("Front")).FirstOrDefault();
             if (img == null)
             {
-                _logger.LogError("ReleaseResponse responded that CAA has the front cover art," +
+                _logger.LogCritical("ReleaseResponse responded that CAA has the front cover art," +
                                  " while the image information has not been found in CAA response");
             }
             else
@@ -281,11 +283,16 @@ public class AudioSnapService : IAudioSnapService
             // int bitThreshold = 3;
             int durationThreshold = 10;
 
-            IOrderedQueryable<AcoustIDStorage> dbQuery = from e in _dbContext.AcoustIDs
-                where _dbContext.GetAbsDiff(e.Duration,query.DurationInSeconds)<durationThreshold //&& 
-                      // _dbContext.GetBitDiff(fpHash, e.Hash )<bitThreshold &&
-                      // (_dbContext.GetBitDiff(fpHash, e.Hash)/(double)sizeof(uint))*e.MatchingScore > query.MatchingRate
-                orderby ((double)_dbContext.GetBitDiff(fpHash, e.Hash)/sizeof(uint))*e.MatchingScore
+            // IOrderedQueryable<AcoustIDStorage> dbQuery = from e in _dbContext.AcoustIDs
+            //     where _dbContext.GetAbsDiff(e.Duration,query.DurationInSeconds)<durationThreshold //&& 
+            //           // _dbContext.GetBitDiff(fpHash, e.Hash )<bitThreshold &&
+            //           // (_dbContext.GetBitDiff(fpHash, e.Hash)/(double)sizeof(uint))*e.MatchingScore > query.MatchingRate
+            //     orderby ((double)_dbContext.GetBitDiff(fpHash, e.Hash)/sizeof(uint))*e.MatchingScore
+            //     select e;
+
+            IQueryable<AcoustIDStorage> dbQuery = from e in _dbContext.AcoustIDs
+                where _dbContext.GetAbsDiff(e.Duration, query.DurationInSeconds) < durationThreshold &&
+                      fpHash == e.Hash
                 select e;
             
             AcoustIDStorage? dbResult = dbQuery.FirstOrDefault();
@@ -334,10 +341,7 @@ public class AudioSnapService : IAudioSnapService
                         snapAID.Results.OrderByDescending(e => e.MatchScore).First();
                     if (mostScoredResult.Recordings==null || mostScoredResult.Recordings.Count < 1)
                     {
-                        // unexpected error
-                        string msg = $"AcoustID response with no recording IDs found: {JsonSerializer.Serialize(snapAID)}"; 
-                        _logger.LogError(msg);
-                        return msg;
+                        return $"AcoustID response with no recording IDs found: {JsonSerializer.Serialize(snapAID)}"; 
                     }
                     else
                     {
@@ -642,7 +646,7 @@ public class AudioSnapService : IAudioSnapService
                     // error occurred: release comes before coverartarchive
                     // response, and is created firstly
                     string msg = "Database response on release has null release response field, which shouldn't happen.";
-                    _logger.LogError(msg);
+                    _logger.LogCritical(msg);
                     // if (status) ErrorMessage = msg;
                     // status = false;
                     return msg;
@@ -736,7 +740,7 @@ public class AudioSnapService : IAudioSnapService
                     string msg = "Database response for CoverArtArchive response is null, " +
                                  "which shouldn't happen as CAA response must be available once " +
                                  "the release is known after recording response";
-                    _logger.LogError(msg);
+                    _logger.LogCritical(msg);
                     // if (status) ErrorMessage = msg;
                     // status = false;
                     

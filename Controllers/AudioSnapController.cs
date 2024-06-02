@@ -25,11 +25,11 @@ public class AudioSnapController : ControllerBase
     public async Task<IActionResult> SnapFingerprint(AudioSnapClientQuery query)
     {
         _snapService.SetNeededComponents(query);
-        await _snapService.CalculateSnapAsync(query);
+        if (!await _snapService.CalculateSnapAsync(query))
+        {
+            return NotFound();
+        }
         string res = _snapService.GetSerializedResponse(query.MaxCoverSize);
-        
-        
         return Content(res,"application/json");
-        // return Ok(snap);
     }
 }

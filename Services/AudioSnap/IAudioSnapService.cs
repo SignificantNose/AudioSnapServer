@@ -17,16 +17,8 @@ public interface IAudioSnapService
     /// </summary>
     /// <returns>
     /// True on success (<see cref="GetSerializedResponse"/> can be called succesfully),
-    /// false on error (see <see cref="ErrorMessages"/> property for more details on the error)</returns>
-    /// <remarks>
-    /// In this case an error is considered something that normally
-    /// shouldn't happen in normal recognition process, like receiving
-    /// empty response, or not receiving any response at all. It must
-    /// be distunguished from the cases where a property is not found
-    /// (well, except for AcoustID response case, where there's literally
-    /// nothing that can be found, so in that case return "track not found"
-    /// as if the track is not known)
-    /// </remarks>
+    /// false on error (the fingerprint couldn't have been recognized)
+    /// </returns>
     Task<bool> CalculateSnapAsync(AudioSnapClientQuery query);
     
     /// <summary>
