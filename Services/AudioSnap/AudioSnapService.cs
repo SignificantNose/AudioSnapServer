@@ -313,8 +313,7 @@ public class AudioSnapService : IAudioSnapService
                 ("acoustid",
                     APIQueryBuilder.Q_AcoustID(_options.AcoustIDKey, query.DurationInSeconds, query.Fingerprint));
                 if (snapAID == null || 
-                    snapAID.Status!="ok" || 
-                    snapAID.Results.Count<1 )
+                    snapAID.Status!="ok")
                 {
                     // TODO: Provide meaningful error messages
                     // snapAID = null;
@@ -324,6 +323,12 @@ public class AudioSnapService : IAudioSnapService
                 }
                 else
                 {
+
+                    snapAID.Results.RemoveAll(e => e.Recordings == null || e.Recordings.Count < 1);
+                    if (snapAID.Results.Count < 1)
+                    {
+                        return "No recordings found";
+                    }
 
                     AcoustID_APIResponse.Result mostScoredResult = 
                         snapAID.Results.OrderByDescending(e => e.MatchScore).First();
