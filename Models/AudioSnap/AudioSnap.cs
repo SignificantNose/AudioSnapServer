@@ -158,7 +158,7 @@ public class AudioSnap
         // which do not allow equivalent transformation,
         // so:
         if ((components & NC_CAA_RESPONSE) != 0)
-            components |= NC_MB_RECPRIORITIZEDRELEASE;
+            components |= NC_MB_RELEASERESPONSE;
 
         if ((components & NC_MB_CHOSENTRACK) != 0)
         {

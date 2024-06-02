@@ -498,7 +498,7 @@ public class AudioSnapService : IAudioSnapService
     }
     
     // 4. Choosing prioritized release
-    private string? ChoosePrioritizedRelease(AudioSnapClientQuery.Priorities priorities)
+    private string? ChoosePrioritizedRelease(AudioSnapClientQuery.Priorities? priorities)
     {
         if ((_neededComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0 &&
             (_retrievedComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0)
@@ -512,85 +512,75 @@ public class AudioSnapService : IAudioSnapService
             }
             else
             {
-                // Applying preferences. Here we know for sure there's at least
-                // one release present & there is something to choose from
-                
-                // problem here: each release must have a media component. if there
-                // are multiple media components, or NONE, that's a problem.
-
-                // releases.OrderByDescending(r =>
-                // {
-                    // string releaseType = r.ReleaseGroup.PrimaryReleaseType;
-                    // if (priorities.ReleaseFormat.ContainsKey(releaseType))
-                    // {
-                        // return priorities.ReleaseFormat[releaseType];
-                    // }
-
-                    // return 0;
-                // });
-                // SortedList<int, int> scoreSortedReleases = new SortedList<int, int>();
-                List<Prioritizer> scoreSortedReleases = new List<Prioritizer>();
-                int releasesCount = releases.Count;
-                int maxScore = 0;
-                int maxScoreCount = 0;
-                for (int i = 0; i < releasesCount; i++)
+                int prioritizedReleaseIdx = 0;
+                if (priorities != null)
                 {
-                    int score = 0;
-                    string releaseType = releases[i].ReleaseGroup.PrimaryReleaseType;
-                    if (priorities.ReleaseFormat.ContainsKey(releaseType))
+                    // Applying preferences. Here we know for sure there's at least
+                    // one release present & there is something to choose from
+                    
+                    List<Prioritizer> scoreSortedReleases = new List<Prioritizer>();
+                    int releasesCount = releases.Count;
+                    int maxScore = 0;
+                    int maxScoreCount = 0;
+                    for (int i = 0; i < releasesCount; i++)
                     {
-                        score = priorities.ReleaseFormat[releaseType];
-                    }
+                        int score = 0;
+                        string releaseType = releases[i].ReleaseGroup.PrimaryReleaseType;
+                        if (priorities.ReleaseFormat!=null && priorities.ReleaseFormat.ContainsKey(releaseType))
+                        {
+                            score = priorities.ReleaseFormat[releaseType];
+                        }
 
-                    if (maxScoreCount <= 0)
-                    {
-                        maxScore = score;
-                        maxScoreCount = 1;
-                    }
-                    else
-                    {
-                        if (maxScore < score)
+                        if (maxScoreCount <= 0)
                         {
                             maxScore = score;
                             maxScoreCount = 1;
                         }
-                        else if (maxScore == score)
+                        else
                         {
-                            maxScoreCount++;
-                        }
-                    }
-
-                    scoreSortedReleases.Add(new Prioritizer(score,i));
-                }
-
-                scoreSortedReleases.Sort((a,b) => a.Score.CompareTo(b.Score));
-
-                List<int> maxScoreIndices = scoreSortedReleases.Skip(releasesCount-maxScoreCount).Select(p => p.Idx).ToList();
-                // MusicBrainz_APIResponse.Release prioritizedRelease = releases[maxScoreIndices[0]];
-                int prioritizedReleaseIdx = maxScoreIndices[0];
-                int maxScoreIndicesCount = maxScoreIndices.Count;
-                if (maxScoreIndicesCount != 1)
-                {
-                    // to not query them each time, in case there are lots of releases
-                    int? countryIdx = null;
-                    foreach (string country in priorities.ReleaseCountry)
-                    {
-                        for (int i = 0; i < maxScoreIndicesCount; i++)
-                        {
-                            if (country.Equals(releases[maxScoreIndices[i]].Country, StringComparison.OrdinalIgnoreCase))
+                            if (maxScore < score)
                             {
-                                countryIdx = maxScoreIndices[i];
+                                maxScore = score;
+                                maxScoreCount = 1;
+                            }
+                            else if (maxScore == score)
+                            {
+                                maxScoreCount++;
                             }
                         }
 
-                        if (countryIdx != null) break;
+                        scoreSortedReleases.Add(new Prioritizer(score,i));
                     }
 
-                    if (countryIdx != null)
+                    scoreSortedReleases.Sort((a,b) => a.Score.CompareTo(b.Score));
+
+                    List<int> maxScoreIndices = scoreSortedReleases.Skip(releasesCount-maxScoreCount).Select(p => p.Idx).ToList();
+                    // MusicBrainz_APIResponse.Release prioritizedRelease = releases[maxScoreIndices[0]];
+                    prioritizedReleaseIdx = maxScoreIndices[0];
+                    int maxScoreIndicesCount = maxScoreIndices.Count;
+                    if (maxScoreIndicesCount != 1 && priorities.ReleaseCountry!=null)
                     {
-                        prioritizedReleaseIdx = countryIdx.Value;
+                        // to not query them each time, in case there are lots of releases
+                        int? countryIdx = null;
+                        foreach (string country in priorities.ReleaseCountry)
+                        {
+                            for (int i = 0; i < maxScoreIndicesCount; i++)
+                            {
+                                if (country.Equals(releases[maxScoreIndices[i]].Country, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    countryIdx = maxScoreIndices[i];
+                                }
+                            }
+
+                            if (countryIdx != null) break;
+                        }
+
+                        if (countryIdx != null)
+                        {
+                            prioritizedReleaseIdx = countryIdx.Value;
+                        }
+                        // otherwise, the first element has already been chosen
                     }
-                    // otherwise, the first element has already been chosen
                 }
 
                 _retrievedComponents |= AudioSnap.NC_MB_RECPRIORITIZEDRELEASE;

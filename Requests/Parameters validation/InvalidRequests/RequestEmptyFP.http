@@ -1,0 +1,12 @@
+﻿POST http://localhost:5015/snap
+Content-Type: application/json
+Accept: application/json
+
+{
+  "fingerprint" : "",
+  "duration" : 641,
+  "matching-rate" : 1.0,
+  "release-properties" : [
+    "album"
+  ]
+}
