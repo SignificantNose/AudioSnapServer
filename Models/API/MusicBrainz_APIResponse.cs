@@ -57,7 +57,7 @@ public record class MusicBrainz_APIResponse(
 
     public record class ReleaseGroup(
         // prioritization
-        [property: JsonPropertyName("primary-type")] string ReleaseType,    
+        [property: JsonPropertyName("primary-type")] string PrimaryReleaseType,    
         
         // (album)
         [property: JsonPropertyName("title")] string Title,

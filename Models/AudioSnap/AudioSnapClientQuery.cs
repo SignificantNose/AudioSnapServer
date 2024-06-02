@@ -14,7 +14,7 @@ public record class AudioSnapClientQuery(
 )
 {
     public record class Priorities(
-        [property: JsonPropertyName("release-format")] Dictionary<string, double> ReleaseFormat,
+        [property: JsonPropertyName("release-format")] Dictionary<string, int> ReleaseFormat,
         [property: JsonPropertyName("release-country")] List<string> ReleaseCountry
         );
 }

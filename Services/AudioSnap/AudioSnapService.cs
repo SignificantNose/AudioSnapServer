@@ -118,7 +118,7 @@ public class AudioSnapService : IAudioSnapService
         if (returnStatus != null) ErrorMessages.Add(returnStatus);
 
         // 4. Choosing prioritized release
-        returnStatus = ChoosePrioritizedRelease();
+        returnStatus = ChoosePrioritizedRelease(query.QueryPriorities);
         if (returnStatus != null) ErrorMessages.Add(returnStatus);
 
         // 5. Validating release media component
@@ -493,12 +493,13 @@ public class AudioSnapService : IAudioSnapService
     }
     
     // 4. Choosing prioritized release
-    private string? ChoosePrioritizedRelease()
+    private string? ChoosePrioritizedRelease(AudioSnapClientQuery.Priorities priorities)
     {
         if ((_neededComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0 &&
             (_retrievedComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0)
         {
-            if (_audioSnap.RecordingResponse.Releases.Count < 1)
+            List<MusicBrainz_APIResponse.Release> releases = _audioSnap.RecordingResponse.Releases;
+            if (releases.Count < 1)
             {
                 // if (status) ErrorMessage = "No releases were found in MusicBrainz response on recording query";
                 // status = false;
@@ -506,10 +507,89 @@ public class AudioSnapService : IAudioSnapService
             }
             else
             {
-                // applying preferences
-                // (for now, choose first releaseID found)
+                // Applying preferences. Here we know for sure there's at least
+                // one release present & there is something to choose from
+                
+                // problem here: each release must have a media component. if there
+                // are multiple media components, or NONE, that's a problem.
+
+                // releases.OrderByDescending(r =>
+                // {
+                    // string releaseType = r.ReleaseGroup.PrimaryReleaseType;
+                    // if (priorities.ReleaseFormat.ContainsKey(releaseType))
+                    // {
+                        // return priorities.ReleaseFormat[releaseType];
+                    // }
+
+                    // return 0;
+                // });
+                // SortedList<int, int> scoreSortedReleases = new SortedList<int, int>();
+                List<Prioritizer> scoreSortedReleases = new List<Prioritizer>();
+                int releasesCount = releases.Count;
+                int maxScore = 0;
+                int maxScoreCount = 0;
+                for (int i = 0; i < releasesCount; i++)
+                {
+                    int score = 0;
+                    string releaseType = releases[i].ReleaseGroup.PrimaryReleaseType;
+                    if (priorities.ReleaseFormat.ContainsKey(releaseType))
+                    {
+                        score = priorities.ReleaseFormat[releaseType];
+                    }
+
+                    if (maxScoreCount <= 0)
+                    {
+                        maxScore = score;
+                        maxScoreCount = 1;
+                    }
+                    else
+                    {
+                        if (maxScore < score)
+                        {
+                            maxScore = score;
+                            maxScoreCount = 1;
+                        }
+                        else if (maxScore == score)
+                        {
+                            maxScoreCount++;
+                        }
+                    }
+
+                    scoreSortedReleases.Add(new Prioritizer(score,i));
+                }
+
+                scoreSortedReleases.Sort((a,b) => a.Score.CompareTo(b.Score));
+
+                List<int> maxScoreIndices = scoreSortedReleases.Skip(releasesCount-maxScoreCount).Select(p => p.Idx).ToList();
+                // MusicBrainz_APIResponse.Release prioritizedRelease = releases[maxScoreIndices[0]];
+                int prioritizedReleaseIdx = maxScoreIndices[0];
+                int maxScoreIndicesCount = maxScoreIndices.Count;
+                if (maxScoreIndicesCount != 1)
+                {
+                    // to not query them each time, in case there are lots of releases
+                    int? countryIdx = null;
+                    foreach (string country in priorities.ReleaseCountry)
+                    {
+                        for (int i = 0; i < maxScoreIndicesCount; i++)
+                        {
+                            if (country.Equals(releases[maxScoreIndices[i]].Country, StringComparison.OrdinalIgnoreCase))
+                            {
+                                countryIdx = maxScoreIndices[i];
+                            }
+                        }
+
+                        if (countryIdx != null) break;
+                    }
+
+                    if (countryIdx != null)
+                    {
+                        prioritizedReleaseIdx = countryIdx.Value;
+                    }
+                    // otherwise, the first element has already been chosen
+                }
+
                 _retrievedComponents |= AudioSnap.NC_MB_RECPRIORITIZEDRELEASE;
-                _audioSnap.RecordingPrioritizedRelease = _audioSnap.RecordingResponse.Releases[0];
+                _audioSnap.RecordingPrioritizedRelease = releases[prioritizedReleaseIdx];
             }
         }
 
@@ -707,6 +787,15 @@ public class AudioSnapService : IAudioSnapService
 
         return null;
     }
+
+    #endregion
+    
+    #region Private helper classes
+
+    private record Prioritizer(
+        int Score,
+        int Idx
+        );
 
     #endregion
 }
