@@ -20,7 +20,7 @@ public record class MusicBrainz_APIResponse(
     [property: JsonPropertyName("isrcs")] List<string> ISRCs,
 
     // (length)
-    [property: JsonPropertyName("length")] int LengthMs,
+    [property: JsonPropertyName("length")] int? LengthMs,
     
     // (title)
     [property: JsonPropertyName("title")] string Title,

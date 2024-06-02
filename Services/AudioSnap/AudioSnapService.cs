@@ -247,6 +247,7 @@ public class AudioSnapService : IAudioSnapService
         try
         {
             HttpResponseMessage httpResponse = await httpClient.SendAsync(request);
+            string json = await httpResponse.Content.ReadAsStringAsync();
             if (!httpResponse.IsSuccessStatusCode)
             {
                 _logger.LogError($"{httpClientName} client: API responded with status code other than success.");
@@ -326,7 +327,7 @@ public class AudioSnapService : IAudioSnapService
 
                     AcoustID_APIResponse.Result mostScoredResult = 
                         snapAID.Results.OrderByDescending(e => e.MatchScore).First();
-                    if (mostScoredResult.Recordings.Count < 1)
+                    if (mostScoredResult.Recordings==null || mostScoredResult.Recordings.Count < 1)
                     {
                         // unexpected error
                         string msg = $"AcoustID response with no recording IDs found: {JsonSerializer.Serialize(snapAID)}"; 

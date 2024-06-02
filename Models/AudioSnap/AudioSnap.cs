@@ -58,7 +58,18 @@ public class AudioSnap
         {"track", new Mapping(snap => snap.ReleaseMedia.TrackOffset+1,NC_MB_RELEASEMEDIA)},
         {"track-count", new Mapping(snap => snap.ReleaseMedia.TrackCount,NC_MB_RELEASEMEDIA)},
         {"title", new Mapping(snap => snap.RecordingResponse.Title,NC_MB_RECORDINGRESPONSE)},
-        {"year", new Mapping(snap => DateTime.Parse(snap.RecordingPrioritizedRelease.ReleaseGroup.FirstReleaseDate).Year,NC_MB_RECPRIORITIZEDRELEASE)},
+        {"year", new Mapping(snap =>
+        {
+            DateTime t;
+            if (DateTime.TryParse(snap.RecordingPrioritizedRelease.ReleaseGroup.FirstReleaseDate, out t))
+            {
+                return t.Year.ToString();
+            }
+            else
+            {
+                return string.Empty;
+            }
+        },NC_MB_RECPRIORITIZEDRELEASE)},
     
         {"external-links", new Mapping(snap=>snap.ExternalLinks, NC_MB_RELEASERESPONSE)},
         {"image-link", new Mapping(snap=>snap.ImageLink, NC_CAA_RESPONSE)}
