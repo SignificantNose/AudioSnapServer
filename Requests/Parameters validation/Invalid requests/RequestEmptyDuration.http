@@ -1,4 +1,4 @@
-﻿POST http://localhost:5015/snap
+﻿POST https://localhost:7144/snap
 Content-Type: application/json
 Accept: application/json
 
