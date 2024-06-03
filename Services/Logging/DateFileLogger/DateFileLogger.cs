@@ -2,6 +2,7 @@
 
 public class DateFileLogger : ILogger
 {
+    // private static ReaderWriterLockSlim _readWriteLock = new ReaderWriterLockSlim();
     private string _logFilePath;
 
     public DateFileLogger(string logDirPath, string logFileName)
@@ -42,16 +43,36 @@ public class DateFileLogger : ILogger
             // how to make a kind of singleton-ish storage of log messages (for
             // different service requirements) that is able to be flushed at the
             // end of the application life cycle
-            lock (typeof(DateFileLogger))
+            //
+            // imho a way of locking using ReaderWriterLockSlim is more descriptive
+            // way of handling this exceptional situations, and (not relevant here,
+            // but nevertheless) this is a much better practise in the cases where
+            // there's a reader that exists, and this class will allow to read
+            // while writing occurs. but I just think that using lock statement
+            // in this case is more optimal than calling a method
+            
+            // _readWriteLock.EnterWriteLock();
+            try
             {
-                using (StreamWriter fileWriter = new StreamWriter(_logFilePath, true))
-                {
-                    fileWriter.WriteLine($"[ {logTime} ][ {logLevel} ]");
-                    fileWriter.WriteLine(logContent);
-                    fileWriter.WriteLine();
-                    fileWriter.Flush();
+                lock(typeof(DateFileLogger)){
+                    using (StreamWriter fileWriter = new StreamWriter(_logFilePath, true))
+                    {
+                        fileWriter.WriteLine($"[ {logTime} ][ {logLevel} ]");
+                        fileWriter.WriteLine(logContent);
+                        fileWriter.WriteLine();
+                        fileWriter.Flush();
+                    }
                 }
             }
+            catch
+            {
+                // ignored
+            }
+            // finally
+            // {
+                // _readWriteLock.ExitWriteLock();
+            // }
+
         }
     }
 }

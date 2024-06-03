@@ -10,8 +10,8 @@ Accept: application/json
   "external-links" : true,
   "priorities" : {
     "release-format" : {
-      "album" :  1.0,
-      "single" : 1.0
+      "album" :  10,
+      "single" : 10
     },
     "release-country" : [
       "XW","BLR"

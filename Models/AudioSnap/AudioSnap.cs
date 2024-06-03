@@ -3,20 +3,20 @@
 
 public class AudioSnap
 {
-    public static readonly byte NC_AID_RESPONSE = 0b00000001;
-    public static readonly byte NC_MB_RECORDINGID = 0b00000010;
+    public static readonly ushort NC_AID_RESPONSE = 0b0000000000000001;
+    public static readonly ushort NC_MB_RECORDINGID = 0b0000000000000010;
     
-    public static readonly byte NC_MB_RECORDINGRESPONSE = 0b00000100;
-    public static readonly byte NC_MB_RECPRIORITIZEDRELEASE = 0b00001000;
-    public static readonly byte NC_MB_RELEASEMEDIA = 0b00010000;
+    public static readonly ushort NC_MB_RECORDINGRESPONSE = 0b0000000000000100;
+    public static readonly ushort NC_MB_RECPRIORITIZEDRELEASE = 0b0000000000001000;
+    public static readonly ushort NC_MB_RELEASEMEDIA = 0b0000000000010000;
     
-    public static readonly byte NC_MB_RELEASERESPONSE = 0b00100000;
-    public static readonly byte NC_MB_CHOSENTRACK = 0b01000000;
+    public static readonly ushort NC_MB_RELEASERESPONSE = 0b0000000000100000;
+    public static readonly ushort NC_MB_CHOSENTRACK = 0b0000000001000000;
     
-    public static readonly byte NC_CAA_RESPONSE = 0b10000000;
+    public static readonly ushort NC_CAA_RESPONSE = 0b0000000010000000;
 
     // for properties with default values:
-    public static readonly byte NC_SPECIALPRESENT = 0b11111111;
+    public static readonly ushort NC_SPECIALPRESENT = 0b1111111111111111;
     
     
     // Lord forgive me, for I have made such monstrosity of a method
@@ -33,7 +33,7 @@ public class AudioSnap
 
     public record class Mapping(
         Func<AudioSnap, object> GetMappedValue,
-        byte Mask
+        ushort Mask
     );
     
     public static readonly Dictionary<string, Mapping> PropertyMappings = 
@@ -148,7 +148,7 @@ public class AudioSnap
     /// </summary>
     /// <param name="components"></param>
     /// <returns></returns>
-    public static byte AdjustNeededComponents(byte components)
+    public static ushort AdjustNeededComponents(ushort components)
     {
         // A magic trick could've been computed on
         // this structure by taking the MSB and 

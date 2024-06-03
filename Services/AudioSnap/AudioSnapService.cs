@@ -32,8 +32,8 @@ public class AudioSnapService : IAudioSnapService
     
     
     // how convenient would've this been if typedef existed
-    private byte _neededComponents = 0;
-    private byte _retrievedComponents = 0;
+    private ushort _neededComponents = 0;
+    private ushort _retrievedComponents = 0;
     private AudioSnap _audioSnap;
     
     public List<string> ErrorMessages { get; private set; } = new List<string>();
@@ -58,9 +58,11 @@ public class AudioSnapService : IAudioSnapService
         // the server can support multiple types of requiring links,
         // both image and external: by setting a bool parameter and
         // by setting the required property in an array
-        
-        if (query.IncludeCover) query.ReleaseProperties.Add("image-link");
+
+        if (query.IncludeCover) query.ReleaseProperties.Add("image-link"); 
+        else query.ReleaseProperties.Remove("image-link");
         if (query.IncludeExternalLinks) query.ReleaseProperties.Add("external-links");
+        else query.ReleaseProperties.Remove("external-links");
         
         foreach (string queryProperty in query.ReleaseProperties)
         {
@@ -68,7 +70,7 @@ public class AudioSnapService : IAudioSnapService
             if (AudioSnap.PropertyMappings.Keys.Contains(queryProperty))
             {
                 _audioSnap.ValidProperties.Add(queryProperty);
-                byte currMask = AudioSnap.PropertyMappings[queryProperty].Mask;
+                ushort currMask = AudioSnap.PropertyMappings[queryProperty].Mask;
                 if(currMask!=AudioSnap.NC_SPECIALPRESENT)
                     _neededComponents |= AudioSnap.PropertyMappings[queryProperty].Mask;
             }
@@ -198,7 +200,7 @@ public class AudioSnapService : IAudioSnapService
         
         foreach (string property in _audioSnap.ValidProperties)
         {
-            byte currMask = AudioSnap.PropertyMappings[property].Mask;
+            ushort currMask = AudioSnap.PropertyMappings[property].Mask;
             if (currMask != AudioSnap.NC_SPECIALPRESENT &&
                 (_retrievedComponents & currMask) == 0)
             {
@@ -331,6 +333,10 @@ public class AudioSnapService : IAudioSnapService
                 else
                 {
 
+                    // TODO: issue: here, if the AcoustIDs exist, the fingerprint actually
+                    // has been recognized, but the server acts as if it is not recognized.
+                    // The problem is with the structure. It must be redone when the
+                    // recognition actually occurred.
                     snapAID.Results.RemoveAll(e => e.Recordings == null || e.Recordings.Count < 1);
                     if (snapAID.Results.Count < 1)
                     {
@@ -404,6 +410,10 @@ public class AudioSnapService : IAudioSnapService
                 _audioSnap.AcoustIDResponse = snapAID;
                 _retrievedComponents |= AudioSnap.NC_AID_RESPONSE;
             }
+            else
+            {
+                return "Fingerprint not detected";
+            }
         }
         return null;
     }
@@ -466,6 +476,12 @@ public class AudioSnapService : IAudioSnapService
             }
             else
             {
+                // TODO: a fun issue: some of the responses on RecordingIDs
+                // of AcoustID are not relevant, which results in null response
+                // here. I guess, some kind of fun routine of checking the 
+                // relevance of the responses of AcoustID is required. Which,
+                // in turn, requires changing the structure of the application
+                // and the database schema
                 snapMBRecording = await QueryAPI<MusicBrainz_APIResponse>(
                     "musicbrainz",
                     APIQueryBuilder.Q_MusicBrainz(
@@ -529,7 +545,7 @@ public class AudioSnapService : IAudioSnapService
                     for (int i = 0; i < releasesCount; i++)
                     {
                         int score = 0;
-                        string releaseType = releases[i].ReleaseGroup.PrimaryReleaseType;
+                        string releaseType = releases[i].ReleaseGroup.PrimaryReleaseType??"";
                         if (priorities.ReleaseFormat!=null && priorities.ReleaseFormat.ContainsKey(releaseType))
                         {
                             score = priorities.ReleaseFormat[releaseType];
