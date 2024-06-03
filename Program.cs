@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Net.Http.Headers;
+using System.Threading.RateLimiting;
 using AudioSnapServer.Data;
 using AudioSnapServer.Models.ResponseStorage;
 using AudioSnapServer.Options;
@@ -7,6 +8,7 @@ using AudioSnapServer.Services.AudioSnap;
 using AudioSnapServer.Services.DateFileLogger;
 using AudioSnapServer.Services.Logging;
 using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http;
@@ -14,6 +16,19 @@ using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
+
+SnapRateLimitOptions rateLimitingOptions = new SnapRateLimitOptions();
+builder.Configuration.GetSection(SnapRateLimitOptions.ConfigurationSectionName).Bind(rateLimitingOptions);
+string fixedPolicy = "fixed";
+
+builder.Services.AddRateLimiter(_ => _.AddFixedWindowLimiter(
+    policyName: fixedPolicy, options =>
+    {
+        options.PermitLimit = rateLimitingOptions.PermitLimit;
+        options.Window = TimeSpan.FromSeconds(rateLimitingOptions.Window);
+        options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    }
+));
 
 string connString = builder.Configuration.GetConnectionString("AppDbConnectionString");
 builder.Services.AddDbContext<AudioSnapDbContext>(options =>
@@ -48,6 +63,8 @@ builder.Services.Replace(ServiceDescriptor.Singleton<IHttpMessageHandlerBuilderF
 
 
 var app = builder.Build();
+app.UseRateLimiter();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/error-development");

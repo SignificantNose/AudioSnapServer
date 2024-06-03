@@ -3,6 +3,7 @@ using AudioSnapServer.Models;
 using AudioSnapServer.Services.AudioSnap;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace AudioSnapServer.Controllers;
 
@@ -22,6 +23,7 @@ public class AudioSnapController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("fixed")]
     public async Task<IActionResult> SnapFingerprint(AudioSnapClientQuery query)
     {
         _snapService.SetNeededComponents(query);
