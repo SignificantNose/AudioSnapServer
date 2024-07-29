@@ -63,6 +63,22 @@ builder.Services.Replace(ServiceDescriptor.Singleton<IHttpMessageHandlerBuilderF
 
 
 var app = builder.Build();
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<AudioSnapDbContext>();
+        var created = context.Database.EnsureCreated();
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Database creation failed");
+        // TODO: make the logic for turning off the database interaction here
+    }
+}
+
 app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
