@@ -40,32 +40,60 @@ builder.Services.AddDbContext<AudioSnapDbContext>(options =>
 builder.Services.AddAPIOptions(builder.Configuration);
 builder.Services.AddAPIHttpClients();
 
+
+
 // Initializing loggers
 // (imho using Options pattern is redundant
 // in the context of logger initialization)
-string? logDirPath = builder.Configuration["Logging:DateFile:LogDirPath"];
-if (logDirPath == null)
-{
-    logDirPath = "logs"+Path.DirectorySeparatorChar;
-}
-if (!Directory.Exists(logDirPath))
-{
-    Directory.CreateDirectory(logDirPath);
-}
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-builder.Logging.AddDateFile(logDirPath);
+
+// foreach(var x in builder.Configuration.GetSection("Logging").GetChildren()){
+//     Console.WriteLine(x.Key);
+// }
+
+
+string? fileLogDirPath = builder.Configuration["Logging:DateFile:LogDirPath"];
+string? fileLogStatus = null;
+// kinda redundant
+bool fileLogEnabled = fileLogDirPath != null;
+bool fileLogSuccessful = true;
+if (fileLogEnabled)
+{
+    if (!Directory.Exists(fileLogDirPath))
+    {
+        try
+        {
+            Directory.CreateDirectory(fileLogDirPath);
+        }
+        catch (Exception ex)
+        {
+            fileLogSuccessful = false;
+            // logger.LogError(ex, "Error while specifying the file logging path");
+            fileLogStatus = "Error while specifying the file logging path";
+        }
+    }
+    if(fileLogSuccessful){
+        builder.Logging.AddDateFile(fileLogDirPath);
+        // logger.LogInformation($"File logging enabled at path: {logDirPath}");
+        fileLogStatus = $"File logging enabled at path: {fileLogDirPath}";
+    }
+}
+
+
 
 
 builder.Services.AddScoped<IAudioSnapService, AudioSnapService>();
 
 builder.Services.Replace(ServiceDescriptor.Singleton<IHttpMessageHandlerBuilderFilter, CompactHttpLoggingFilter>());
 
-
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    
+    // DB initialization
     try
     {
         var context = services.GetRequiredService<AudioSnapDbContext>();
@@ -73,9 +101,19 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "Database creation failed");
         // TODO: make the logic for turning off the database interaction here
+    }
+
+
+    // file logging status
+    if(fileLogEnabled){
+        if(fileLogSuccessful){
+            logger.LogInformation(fileLogStatus);
+        }
+        else{
+            logger.LogError(fileLogStatus);
+        }
     }
 }
 
