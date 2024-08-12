@@ -6,3 +6,4 @@ riderModule.iml
 .dockerignore
 Packages/
 .vscode
+.env

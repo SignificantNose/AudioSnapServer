@@ -1,0 +1,41 @@
+services:
+  audiosnap:
+    image: significantnose/audiosnap-server
+    build: .
+    
+    ports:
+      - 8080:8080
+    environment:
+      - ASPNETCORE_ConnectionStrings__AppDbConnectionString=SERVER=db;DATABASE=audiosnap;USER=${DbUser};PASSWORD=${DbPassword};
+      - ASPNETCORE_ExternalAPI-Client__AcoustIDKey=${AcoustIDKey}
+      - ASPNETCORE_ExternalAPI-Client__UserAgent=${UserAgent}
+      - ASPNETCORE_ExternalAPI-Client__Version=${Version}
+      - ASPNETCORE_ExternalAPI-Client__ContactEmail=${ContactEmail}
+
+    depends_on:
+      db:
+        condition: service_healthy
+  
+
+  db:
+    image: mysql
+    restart: always
+
+    environment:
+      - MYSQL_DATABASE=audiosnap
+      - MYSQL_USER=${DbUser}
+      - MYSQL_PASSWORD=${DbPassword}
+      - MYSQL_ROOT_PASSWORD=${DbRootPassword}
+    volumes:
+      - db-data:/var/lib/mysql
+
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u ${DbUser} -p${DbPassword}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+
+volumes:
+  db-data:
