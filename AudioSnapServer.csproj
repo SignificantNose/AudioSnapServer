@@ -18,7 +18,7 @@
 
     <ItemGroup>
       <Reference Include="Chromaprint">
-        <HintPath>/home/significantnose/tryingfunstuff/aspnet_coursework/Chromaprint_lib/bin/Debug/net8.0/Chromaprint.dll</HintPath>
+        <HintPath>./Packages/Chromaprint.dll</HintPath>
       </Reference>
     </ItemGroup>
 
