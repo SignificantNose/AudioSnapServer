@@ -274,8 +274,10 @@ public class AudioSnapService : IAudioSnapService
     // 1. AcoustID response
     private async Task<string?> QueryAcoustIDAsync(AudioSnapClientQuery query)
     {
+
         if ((_neededComponents & AudioSnap.NC_AID_RESPONSE) != 0)
         {
+            bool dbAccessible = true;
             // calculate the hash
             byte[] acquiredData = ChromaBase64.ByteEncoding.GetBytes(query.Fingerprint);
             int[] fingerprint = IFileChromaContext.DecodeFingerprint(acquiredData, true, out _);
@@ -297,7 +299,17 @@ public class AudioSnapService : IAudioSnapService
                       fpHash == e.Hash
                 select e;
             
-            AcoustIDStorage? dbResult = dbQuery.FirstOrDefault();
+            AcoustIDStorage? dbResult = null;
+            if(dbAccessible){
+                try{
+                    dbResult = dbQuery.FirstOrDefault();
+                }
+                catch{
+                    _logger.LogError("Database is not accessible while trying to query AcoustID information");
+                    dbAccessible = false;
+                    dbResult = null;
+                }
+            }
             
             
             AcoustID_APIResponse? snapAID = null;
@@ -355,7 +367,18 @@ public class AudioSnapService : IAudioSnapService
                         
                         // if the acquired result exists in the database and its matching score
                         // is larger than the one stored in a database, update the database entry
-                        AcoustIDStorage? entry = _dbContext.AcoustIDs.Find(mostScoredResult.AcoustID_ID);
+
+                        AcoustIDStorage? entry = null;
+                        if(dbAccessible){
+                            try{
+                                entry = _dbContext.AcoustIDs.Find(mostScoredResult.AcoustID_ID);
+                            }
+                            catch{
+                                _logger.LogError("Database is not accessible while trying to query AcoustID information");
+                                dbAccessible = false;
+                                entry = null;
+                            }
+                        }
 
                         if (entry != null)
                         {
@@ -374,17 +397,27 @@ public class AudioSnapService : IAudioSnapService
                         }
                         else
                         {
-                            await _dbContext.AcoustIDs.AddAsync(new AcoustIDStorage()
-                            {
-                                Hash = fpHash,
-                                AcoustID = mostScoredResult.AcoustID_ID,
-                                Duration = query.DurationInSeconds,
-                                MatchingScore = mostScoredResult.MatchScore,
-                                RecordingID = mostScoredRecordingId
-                            });
+                            if(dbAccessible){
+                                await _dbContext.AcoustIDs.AddAsync(new AcoustIDStorage()
+                                {
+                                    Hash = fpHash,
+                                    AcoustID = mostScoredResult.AcoustID_ID,
+                                    Duration = query.DurationInSeconds,
+                                    MatchingScore = mostScoredResult.MatchScore,
+                                    RecordingID = mostScoredRecordingId
+                                });
+                            }
                         }
 
-                        await _dbContext.SaveChangesAsync();
+                        if(dbAccessible){
+                            try{
+                                await _dbContext.SaveChangesAsync();
+                            }
+                            catch{
+                                _logger.LogError("Database is not accessible while trying to save AcoustID information");
+                                dbAccessible = false;
+                            }
+                        }
                         
                         // A slippery moment here: if the score is low, the result will still
                         // be stored in a database, no matter the user constraints. And further
@@ -460,6 +493,7 @@ public class AudioSnapService : IAudioSnapService
         if ((_neededComponents & AudioSnap.NC_MB_RECORDINGRESPONSE) != 0 &&
             (_retrievedComponents & AudioSnap.NC_MB_RECORDINGID)!=0)
         {
+            bool dbAccessible = true;
             //if(recordingID is not present in the database already)
             MusicBrainz_APIResponse? snapMBRecording = null;
 
@@ -468,7 +502,18 @@ public class AudioSnapService : IAudioSnapService
                 where e.RecordingID == _audioSnap.RecordingID
                 select e;
             
-            RecordingStorage? dbMBRecording = dbQuery.FirstOrDefault(); 
+            RecordingStorage? dbMBRecording = null;
+            if(dbAccessible){
+                try{
+                    dbMBRecording = dbQuery.FirstOrDefault();
+                }
+                catch{
+                    _logger.LogError("Database not accessible while trying to fetch MusicBrainz recording data");
+                    dbAccessible = false;
+                    dbMBRecording = null;
+                }
+
+            }
             if (dbMBRecording!=null)
             {
                 // return result from the database
@@ -498,12 +543,21 @@ public class AudioSnapService : IAudioSnapService
                 }
                 else
                 {
-                    await _dbContext.Recordings.AddAsync(new RecordingStorage()
-                    {
-                        RecordingID = _audioSnap.RecordingID,
-                        RecordingResponse = JsonSerializer.Serialize(snapMBRecording)
-                    });
-                    await _dbContext.SaveChangesAsync();
+                    if(dbAccessible){
+                        await _dbContext.Recordings.AddAsync(new RecordingStorage()
+                        {
+                            RecordingID = _audioSnap.RecordingID,
+                            RecordingResponse = JsonSerializer.Serialize(snapMBRecording)
+                        });
+                        try{
+                            await _dbContext.SaveChangesAsync();
+                        }
+                        catch{
+                            _logger.LogError("Database not accessible while trying to save MusicBrainz recording data");
+                            dbAccessible = false;
+                        }
+                    }
+
                 }
             }
 
@@ -641,6 +695,7 @@ public class AudioSnapService : IAudioSnapService
         if ((_neededComponents & AudioSnap.NC_MB_RELEASERESPONSE) != 0 &&
             (_retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
         {
+            bool dbAccessible = true;
             string preferredReleaseID = _audioSnap.RecordingPrioritizedRelease.Id;
             // if(releaseID is not present in the database already)
 
@@ -649,7 +704,20 @@ public class AudioSnapService : IAudioSnapService
                 from e in _dbContext.Releases
                 where e.ReleaseID == preferredReleaseID
                 select new ReleaseDBResponse(e.ReleaseID, e.ReleaseResponse);
-            ReleaseDBResponse? dbMBRelease = dbQuery.FirstOrDefault();
+            ReleaseDBResponse? dbMBRelease = null;
+
+            if(dbAccessible){
+                try{
+                    dbMBRelease = dbQuery.FirstOrDefault();
+                }
+                catch{
+                    _logger.LogError("Database not accessible while trying to fetch MusicBrainz release data");
+                    dbAccessible = false;
+                    dbMBRelease = null;
+                }
+
+            }
+
             if(dbMBRelease!=null)
             {
                 // return database entry
@@ -688,14 +756,22 @@ public class AudioSnapService : IAudioSnapService
                 }
                 else
                 {
-                    await _dbContext.Releases.AddAsync(new ReleaseStorage()
-                    {
-                        ReleaseID = preferredReleaseID,
-                        CoverResponse = null,
-                        ReleaseResponse = JsonSerializer.Serialize(snapMBRelease)
-                    });
+                    if(dbAccessible){
+                        await _dbContext.Releases.AddAsync(new ReleaseStorage()
+                        {
+                            ReleaseID = preferredReleaseID,
+                            CoverResponse = null,
+                            ReleaseResponse = JsonSerializer.Serialize(snapMBRelease)
+                        });
 
-                    await _dbContext.SaveChangesAsync();
+                        try{
+                            await _dbContext.SaveChangesAsync();
+                        }
+                        catch{
+                            _logger.LogError("Database not accessible while trying to save MusicBrainz release data");
+                            dbAccessible = false;
+                        }
+                    }
                 }
             }
 
@@ -737,6 +813,7 @@ public class AudioSnapService : IAudioSnapService
         if ((_neededComponents & AudioSnap.NC_CAA_RESPONSE) != 0 &&
             (_retrievedComponents & AudioSnap.NC_MB_RECPRIORITIZEDRELEASE) != 0)
         {
+            bool dbAccessible = true;
             if (_audioSnap.ReleaseResponse.CAAInfo.IsFrontAvailable)
             {
                 CoverArtArchive_APIResponse? snapCAA = null;
@@ -747,7 +824,18 @@ public class AudioSnapService : IAudioSnapService
                     where e.ReleaseID == preferredReleaseID
                     select new CoverArtDBResponse(e.ReleaseID, e.CoverResponse);
 
-                CoverArtDBResponse? dbCAA = dbQuery.FirstOrDefault();
+
+                CoverArtDBResponse? dbCAA = null;
+                if(dbAccessible){
+                    try{
+                        dbCAA = dbQuery.FirstOrDefault();
+                    }
+                    catch{
+                        _logger.LogError("Database not accessible while trying to fetch CoverArtArchive data");
+                        dbAccessible = false;
+                        dbCAA = null;
+                    }
+                }
                 if (dbCAA == null)
                 {
                     // error occurred. do not continue
@@ -784,10 +872,18 @@ public class AudioSnapService : IAudioSnapService
                         else
                         {
                             string serializedCAA = JsonSerializer.Serialize(snapCAA);
-                            await _dbContext.Releases
-                                .Where(e => e.ReleaseID == preferredReleaseID)
-                                .ExecuteUpdateAsync(e => e.SetProperty(p => p.CoverResponse, serializedCAA));
-                            await _dbContext.SaveChangesAsync();
+                            if(dbAccessible){
+                                await _dbContext.Releases
+                                    .Where(e => e.ReleaseID == preferredReleaseID)
+                                    .ExecuteUpdateAsync(e => e.SetProperty(p => p.CoverResponse, serializedCAA));
+                                try{
+                                    await _dbContext.SaveChangesAsync();
+                                }
+                                catch{
+                                    _logger.LogError("Database not accessible while trying to save CoverArtArchive data");
+                                    dbAccessible = false;
+                                }
+                            }
                         }
                     }
                 }

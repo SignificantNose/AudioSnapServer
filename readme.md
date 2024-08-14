@@ -80,6 +80,14 @@ As an example, the parameters can be provided using ```.env``` file. The content
     DbPassword=password
     DbRootPassword=password2
 
+> Note: It is possible that MySql image will take too much time to initialize while running for the first time in a container. In that case it is possible that the healthcheck will pass, but when the audiosnap-server container sends a request to the database, it will fail, describing the issue as "It was not able to connect to any of the hosts", consequently the database will not be initialized and all the requests considering the database access will fail. There are 2 ways to solve this issue: set a larger  ```db:healthcheck:start_period``` value (e.x., 30s) and then set it to a lower value after the first launch, or restart the compose application.
+
+# Notes
+## Considering mandatory database integration
+The application expects to be able to connect to the database and initialize it. This approach excludes the fact that the microservice's functionality can be duplicated on any client, therefore making the microservice useful in terms of storage feature. That way the client doesn't have to store anything, and in fact, that's how it should be.  
+
+However, without the database the microservice will be unresponsive. Unfortunately, this was not taken into account while developing the microservice. It was a mistake, as in my opinion the inability to connect to a database **must not** be the reason to fail to provide the client with the requested data.
+
 
 [AudioSnap client]: <https://github.com/0TheThing0/AvaloniaAudioSnap>
 [Chromaprint library]: <https://github.com/0TheThing0/Chromaprint_lib>
