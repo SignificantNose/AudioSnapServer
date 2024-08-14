@@ -37,6 +37,8 @@ The application also requires to have a connection string parameter installed in
 
 ## Manual build
 
+In order to build the project you'll have to add a reference to [our Chromaprint library][Chromaprint library] package. Once the library project has been built, you must provide the compiled library to the appropriate location. The location where the current project expects to find the compiled ```.dll``` file is provided in ```AudioSnapServer.csproj```, and is currently equal to: ```./Packages/Chromaprint.dll```.
+
 After building the project, the binary can be successfully launched, but the web service will fail to launch, as the configuration parameters described above are missing. In order to provide them, multiple approaches can be taken, according to a documentation [article][MSDN ASP.NET config] considering configuration in ASP.NET.  
 The safer option is to incude these parameters as environment variables.  
 
