@@ -31,9 +31,13 @@ Either way, some configuration parameters must be provided. In order to communic
 - Application version - required by MusicBrainz
 - Contact Email - required by MusicBrainz
 
-Your application must be registered [here][AcoustID register application] in order for AcoustID to fulfill your requests. More information on parameters for MusicBrainz can be found [here][MusicBrainz UserAgent strings]
+Your application must be registered [here][AcoustID register application] in order for AcoustID to fulfill your requests. More information on parameters for MusicBrainz can be found [here][MusicBrainz UserAgent strings].
 
-The application also requires to have a connection string parameter installed in order to be able to communicate with a MySql database. 
+> WARNING: the API key is visible in logs, as every HTTP request is logged. The API key goes in a GET request, as the AcoustID service requires. This cannot be avoided because of the fact that all requests to AcoustID are GET requests. Please consider this fact and take additional precautions against the machine being compromised, so that the logs are not visible to third-parties. Also, read the note below considering the application secrets.
+
+> Note: in real-life scenarios the API key should not be stored as an environment variable, in case no other measures were taken (e.x., encryption of the variable value). Alternatives to application secrets can be found in [this MSDN article][MSDN ASP.NET secrets].
+
+The application also requires to have a connection string parameter installed in order to be able to communicate with a MySql database. The database integration is mandatory. More on this issue can be found in the [notes](#considering-mandatory-database-integration).
 
 ## Manual build
 
@@ -88,6 +92,11 @@ The application expects to be able to connect to the database and initialize it.
 
 However, without the database the microservice will be unresponsive. Unfortunately, this was not taken into account while developing the microservice. It was a mistake, as in my opinion the inability to connect to a database **must not** be the reason to fail to provide the client with the requested data.
 
+## HTTP requests logging
+A custom HTTP requests logging has been introduced to the microservice. The main reason foe this is that the outgoing requests to the external microservices (mainly, AcoustID) are **large** because of the fingerprint size, which goes in a GET request. Whenever a request occurs, it is logged. The default HTTP client logger will log the stages of the request, each time duplicating the URL, which makes it difficult to navigate through logs when there are multiple identical long URLs. The custom HTTP logger mitigates this issue by displaying the URL once.
+
+One more important reason for custom implementation of the logger is the display of the time the request took to be processed, which the default HTTP logger implementation lacks. This was considered crucial, as it allowed to find out which services were slower and, therefore, **longer to respond**. This information can be useful later in order to receive responses from certain services faster, if the response time doesn't change (meaning, it is not related to the service's workload).
+
 
 [AudioSnap client]: <https://github.com/0TheThing0/AvaloniaAudioSnap>
 [Chromaprint library]: <https://github.com/0TheThing0/Chromaprint_lib>
@@ -107,3 +116,4 @@ However, without the database the microservice will be unresponsive. Unfortunate
 [Docker interpolation]: <https://docs.docker.com/compose/environment-variables/variable-interpolation/#ways-to-set-variables-with-interpolation>
 
 [MSDN ASP.NET config]: <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?view=aspnetcore-8.0>
+[MSDN ASP.NET secrets]: <https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-8.0>
