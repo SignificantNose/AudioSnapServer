@@ -14,7 +14,7 @@ The inspiration for the project comes from [this article][chromaprint article], 
 
 ## Disclaimer
 
-> Although **there ARE solutions to the problem** provided by AcoustID and MusicBrainz themselves (e.x. [MusicBrainz Picard]), our project's goal was to — again — get familiar with the audio fingerprinting algorithms and build something that can be used as a convenient mean of providing metadata to audio files, analagous to solutions provided by MusicBrainz and AcoustID.  
+> Although **there ARE solutions to the problem** provided by AcoustID and MusicBrainz themselves (e.g. [MusicBrainz Picard]), our project's goal was to — again — get familiar with the audio fingerprinting algorithms and build something that can be used as a convenient mean of providing metadata to audio files, analagous to solutions provided by MusicBrainz and AcoustID.  
 Our goal was not to build a counterpart OR competitor to these solutions by any means, as our solution strongly relies on their services and their audio fingerprinting algorithms. Neither was our goal to monetise the application, even though it is allowed on a paid basis.  
 Same goes to the rewritten [open-source chromaprint library][original chromaprint library], which is basically the implementation of the audio fingerprinting algorithms described in [this article][chromaprint article]. The goal was to get familiar with the algorithms, and we believe that the best way to learn is to practise.
 
@@ -35,7 +35,7 @@ Your application must be registered [here][AcoustID register application] in ord
 
 > WARNING: the API key is visible in logs, as every HTTP request is logged. The API key goes in a GET request, as the AcoustID service requires. This cannot be avoided because of the fact that all requests to AcoustID are GET requests. Please consider this fact and take additional precautions against the machine being compromised, so that the logs are not visible to third-parties. Also, read the note below considering the application secrets.
 
-> Note: in real-life scenarios the API key should not be stored as an environment variable, in case no other measures were taken (e.x., encryption of the variable value). Alternatives to application secrets can be found in [this MSDN article][MSDN ASP.NET secrets].
+> Note: in real-life scenarios the API key should not be stored as an environment variable, in case no other measures were taken (e.g., encryption of the variable value). Alternatives to application secrets can be found in [this MSDN article][MSDN ASP.NET secrets].
 
 The application also requires to have a connection string parameter installed in order to be able to communicate with a MySql database. The database integration is mandatory. More on this issue can be found in the [notes](#considering-mandatory-database-integration).
 
@@ -84,9 +84,9 @@ As an example, the parameters can be provided using ```.env``` file. The content
     DbPassword=password
     DbRootPassword=password2
 
-> Note: It is possible that MySql image will take too much time to initialize while running for the first time in a container. In that case it is possible that the healthcheck will pass, but when the audiosnap-server container sends a request to the database, it will fail, describing the issue as "It was not able to connect to any of the hosts", consequently the database will not be initialized and all the requests considering the database access will fail. There are 2 ways to solve this issue: set a larger  ```db:healthcheck:start_period``` value (e.x., 30s) and then set it to a lower value after the first launch, or restart the compose application.
+> Note: It is possible that MySql image will take too much time to initialize while running for the first time in a container. In that case it is possible that the healthcheck will pass, but when the audiosnap-server container sends a request to the database, it will fail, describing the issue as "It was not able to connect to any of the hosts", consequently the database will not be initialized and all the requests considering the database access will fail. There are 2 ways to solve this issue: set a larger  ```db:healthcheck:start_period``` value (e.g., 30s) and then set it to a lower value after the first launch, or restart the compose application.
 
-# Notes
+# Notes & features
 ## Considering mandatory database integration
 The application expects to be able to connect to the database and initialize it. This approach excludes the fact that the microservice's functionality can be duplicated on any client, therefore making the microservice useful in terms of storage feature. That way the client doesn't have to store anything, and in fact, that's how it should be.  
 
@@ -97,6 +97,26 @@ A custom HTTP requests logging has been introduced to the microservice. The main
 
 One more important reason for custom implementation of the logger is the display of the time the request took to be processed, which the default HTTP logger implementation lacks. This was considered crucial, as it allowed to find out which services were slower and, therefore, **longer to respond**. This information can be useful later in order to receive responses from certain services faster, if the response time doesn't change (meaning, it is not related to the service's workload).
 
+## File logging
+The microservice allows to log the actions in 2 ways:
+- Console logging (always enabled)
+- File logging (disabled by default)
+
+In order to enable file logging, a configuration parameter must be provided:
+    
+    "Logging": {
+        "DateFile": {
+            "LogDirPath": "<PATH_TO_LOG_DIRECTORY>"
+        }
+    }
+
+The configuration parameter can be provided the same way as the parameters described in [manual build](#manual-build). 
+
+> E.g. in order to provide the configuration parameter as an environment variable, the name of the variable can be the following:
+>    
+>     ASPNETCORE_Logging__DateFile__LogDirPath=<PATH_TO_LOG_DIRECTORY>
+
+The microservice will try to create the directory provided in the configuration parameter, in case it doesn't exist, and then create the file there. The name of the file will reflect the date and time the microservice has been started on. Each new launch of the microservice will create a new log file.
 
 [AudioSnap client]: <https://github.com/0TheThing0/AvaloniaAudioSnap>
 [Chromaprint library]: <https://github.com/0TheThing0/Chromaprint_lib>
