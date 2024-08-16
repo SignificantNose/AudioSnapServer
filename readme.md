@@ -49,40 +49,40 @@ The safer option is to incude these parameters as environment variables.
 Required configuration parameters are as follows:
 
     "ExternalAPI-Client": {
-        "AcoustIDKey" : "key",
-        "UserAgent": "useragent",
-        "Version": "version",
-        "ContactEmail": "email"
+        "AcoustIDKey" : "<ACOUSTID_KEY>",
+        "UserAgent": "<USERAGENT>",
+        "Version": "<VERSION>",
+        "ContactEmail": "<EMAIL>"
     },
     "ConnectionStrings": {
-        "AppDbConnectionString" : "SERVER=server;DATABASE=database;USER=user;PASSWORD=password;"
+        "AppDbConnectionString" : "<MYSQL_CONN_STRING>"
     }
 
 Consequently, the corresponding environment variables that can be provided in order to launch the application:
 
-    ASPNETCORE_ExternalAPI-Client__AcoustIDKey=key
-    ASPNETCORE_ExternalAPI-Client__UserAgent=useragent
-    ASPNETCORE_ExternalAPI-Client__Version=version
-    ASPNETCORE_ExternalAPI-Client__ContactEmail=email
+    ASPNETCORE_ExternalAPI-Client__AcoustIDKey=<ACOUSTID_KEY>
+    ASPNETCORE_ExternalAPI-Client__UserAgent=<USERAGENT>
+    ASPNETCORE_ExternalAPI-Client__Version=<VERSION>
+    ASPNETCORE_ExternalAPI-Client__ContactEmail=<EMAIL>
 
-    ASPNETCORE_ConnectionStrings__AppDbConnectionString=SERVER=server;DATABASE=database;USER=user;PASSWORD=password;
+    ASPNETCORE_ConnectionStrings__AppDbConnectionString=<MYSQL_CONN_STRING>;
 
 ## Docker Compose application launch
 
-Docker Compose launch methods are easier in comparison to manual launch methods. Some parameters must be passed to the Compose file. There are multiple ways to do that, as described [here][Docker interpolation].
+Docker Compose launch methods are easier in comparison to launching the manually built application. Some parameters must be passed to the Compose file. There are multiple ways to do that, as described [here][Docker interpolation].
 
 As an example, the parameters can be provided using ```.env``` file. The contents of the file are as follows:
 
     # external API data
-    AcoustIDKey=key
-    UserAgent=useragent
-    Version=version
-    ContactEmail=email
+    AcoustIDKey=<ACOUSTID_KEY>
+    UserAgent=<USERAGENT>
+    Version=<VERSION>
+    ContactEmail=<EMAIL>
 
     # database data
-    DbUser=user
-    DbPassword=password
-    DbRootPassword=password2
+    DbUser=<DBUSER>
+    DbPassword=<DBPASSWORD>
+    DbRootPassword=<DBROOTPASSWORD>
 
 > Note: It is possible that MySql image will take too much time to initialize while running for the first time in a container. In that case it is possible that the healthcheck will pass, but when the audiosnap-server container sends a request to the database, it will fail, describing the issue as "It was not able to connect to any of the hosts", consequently the database will not be initialized and all the requests considering the database access will fail. There are 2 ways to solve this issue: set a larger  ```db:healthcheck:start_period``` value (e.g., 30s) and then set it to a lower value after the first launch, or restart the compose application.
 
@@ -118,6 +118,43 @@ The configuration parameter can be provided the same way as the parameters descr
 
 The microservice will try to create the directory provided in the configuration parameter, in case it doesn't exist, and then create the file there. The name of the file will reflect the date and time the microservice has been started on. Each new launch of the microservice will create a new log file.
 
+## Configuring HTTPS
+The easiest way to launch the application with an HTTPS configuration is to change the launch profile. The default launch profile in manually built microservice is HTTP, as the application relies on ```Properties/launchprofile.json``` file. The launch profile can be changed using ```--launch-profile "<PROFILE_NAME>"``` flag on application launch, which'll require the service to have access to a valid HTTPS certificate.
+
+While the procedure on the manually built microservice is pretty [straightforward][MSDN ASP.NET https manual], it is not that simple to implement it in a containerized microservice. The following will describe some obstacles that might appear while configuring the microservice to run as an HTTPS service in a container.
+> Note considering manually built microservice: there might be some difficulties with certain linux distros that are not listed in the [article][MSDN ASP.NET https manual], e.g. various ways to trust the certificate "will not work", as the warning will appear each time the application is started, while the certificate is in fact trusted. The issue I faced was not fixed as a result — the warning remained. But it is important to note that the ```linux-dev-certs``` dotnet tool which can be used to install a trusted certificate addresses the issue, saying that the warning might still remain, and the application will still work properly.
+
+### Docker compose HTTPS: how-to?
+If you do not have a ```.pfx``` HTTPS certificate, it can be generated using this command:
+    
+    dotnet dev-certs https -ep <CERT_FILE_PATH> -p <CERT_CREDENTIALS>
+
+The name of the certificate is expected to be ```audiosnap.pfx```, otherwise the certificate will not be found.
+
+[This article][GH dotnet host https] also suggests to trust the certificate. However, in my case the certificate did not require to be trusted, and no warnings appear on the application launch. This might be different in your case, but keep in mind.
+
+You can find a ```compose-https.yaml``` file in the repository. The default 
+
+    docker compose up command 
+
+will pick the ```compose.yaml``` file. That's why in order to launch the HTTPS-configured compose file you have to use the following command:
+
+    docker compose -f compose-https.yaml up
+
+Also, some additonal parameters must be provided to the compose file. They can be provided the same way as described [here](#docker-compose-application-launch). The parameters are:
+
+    certDirPath=<PATH_TO_DIR_WITH_CERTIFICATE>
+    certCredentials=<CERTIFICATE_CREDENTIALS>
+
+
+### What could possibly go wrong?
+The microservice might not have access to the certificate. This is possible when the access permissions of the mounted directory with the certificate (or the certificate itself) are restrictive. Make sure users have the access to read the file and the directory.
+
+#### OR
+
+The ```compose-https.yaml``` file can be changed, so that the target mount directory is a directory that is not accessible by a user in the container (also, in that case the environment variable that is responsible for storing the certificate location must be changed in order to correspond to the relevant certificate path). The provided directory path IS accessible, it should not be inaccessible. But also keep in mind that it is possible.
+
+
 [AudioSnap client]: <https://github.com/0TheThing0/AvaloniaAudioSnap>
 [Chromaprint library]: <https://github.com/0TheThing0/Chromaprint_lib>
 [Original chromaprint library]: <https://github.com/acoustid/chromaprint/tree/master>
@@ -137,3 +174,6 @@ The microservice will try to create the directory provided in the configuration 
 
 [MSDN ASP.NET config]: <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?view=aspnetcore-8.0>
 [MSDN ASP.NET secrets]: <https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-8.0>
+[MSDN ASP.NET https manual]: <https://learn.microsoft.com/en-en/aspnet/core/security/enforcing-ssl?view=aspnetcore-8.0>
+
+[GH dotnet host https]: <https://github.com/dotnet/dotnet-docker/blob/main/samples/host-aspnetcore-https.md>

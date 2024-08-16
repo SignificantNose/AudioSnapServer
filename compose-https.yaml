@@ -1,0 +1,22 @@
+services:
+  audiosnap:
+    ports:
+      - 8081:443
+    environment:
+      - ASPNETCORE_HTTPS_PORTS=443
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=${certCredentials:?password for certificate required}
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/audiosnap.pfx
+    extends:
+      file: compose.yaml
+      service: audiosnap
+    volumes:
+      - type: bind
+        source: ${certDirPath:-~/.aspnet/https}
+        target: /https
+  db:
+    extends:
+      file: compose.yaml
+      service: db
+
+volumes:
+  db-data:

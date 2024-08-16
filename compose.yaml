@@ -4,8 +4,9 @@ services:
     build: .
     
     ports:
-      - 8080:8080
+      - 8080:80
     environment:
+      - ASPNETCORE_HTTP_PORTS=80
       - ASPNETCORE_ConnectionStrings__AppDbConnectionString=SERVER=db;DATABASE=audiosnap;USER=${DbUser};PASSWORD=${DbPassword};
       - ASPNETCORE_ExternalAPI-Client__AcoustIDKey=${AcoustIDKey}
       - ASPNETCORE_ExternalAPI-Client__UserAgent=${UserAgent}
