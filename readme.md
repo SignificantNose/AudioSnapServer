@@ -132,7 +132,7 @@ All possible properties are described below. See [this directory](Requests/) for
 - `external-links` — bool type property, defines if the links to external services (like YouTube, Spotify) must be included in the response. The property cannot be included in `release-properties`, as it is not really metadata of the audiofile. Not mandatory. The default value is `false`.
 - `priorities` — a JSON object, defines the choice criteria of a certain release. Each recording has multiple releases, and the client has an option to choose a certain release based on some criteria.
 
-    The object has two properties:
+    The object can have two properties:
     - `release-format` — a JSON object, the names of the fields are the type of the release, and the values are the priority values. The names of the fields (meaning, the names of the release types) are listed below:
         
           album, audio-drama, audiobook, broadcast, compilation, demo, dj-mix, ep, field-recording, interview, live, mixtape, other, remix, single, soundtrack, spokenword
@@ -267,6 +267,9 @@ The microservice might not have access to the certificate. This is possible when
 #### OR
 
 The ```compose-https.yaml``` file can be changed, so that the target mount directory is a directory that is not accessible by a user in the container (also, in that case the environment variable that is responsible for storing the certificate location must be changed in order to correspond to the relevant certificate path). The provided directory path IS accessible, it should not be inaccessible. But also keep in mind that it is possible.
+
+# Conclusion
+Considering this repository, it can be said that, as a result, a microservice has been created that is flexible due to the features ASP.NET Core provides. The microservice can also be modified to be independent of the external APIs, as the communication interface that these APIs follow can be considered all-purpose, as it is easy to follow.
 
 
 [AudioSnap client]: <https://github.com/0TheThing0/AvaloniaAudioSnap>
