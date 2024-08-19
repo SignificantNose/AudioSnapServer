@@ -23,6 +23,10 @@ Same goes to the rewritten [open-source chromaprint library][original chromaprin
 - [How to launch](#how-to-launch)
     - [Manual build](#manual-build)
     - [Docker Compose application launch](#docker-compose-application-launch)
+- [User manual](#user-manual)
+    - [Request properties](#request-properties)
+    - [Microservice response](#microservice-response)
+    - [Response properties](#response-properties)
 - [Notes & features](#notes--features)
     - [Considering mandatory database integration](#considering-mandatory-database-integration)
     - [HTTP requests logging](#http-requests-logging)
@@ -96,6 +100,105 @@ As an example, the parameters can be provided using ```.env``` file. The content
     DbRootPassword=<DBROOTPASSWORD>
 
 > Note: It is possible that MySql image will take too much time to initialize while running for the first time in a container. In that case it is possible that the healthcheck will pass, but when the audiosnap-server container sends a request to the database, it will fail, describing the issue as "It was not able to connect to any of the hosts", consequently the database will not be initialized and all the requests considering the database access will fail. There are 2 ways to solve this issue: set a larger  ```db:healthcheck:start_period``` value (e.g., 30s) and then set it to a lower value after the first launch, or restart the compose application.
+
+# User manual
+The application can only process POST requests sent to ```/snap``` endpoint. The main reason for that is that, apart from the fingerprint (which is usually a large Base64-encoded string), the microservice must receive information about what properties to return about the audio. The microservice expects to receive a JSON. An example of a minimal request that will be considered valid is the following request:
+
+    POST https://api.audiosnap.com /snap
+    Content-Type: application/json
+    Accept: application/json
+
+    {
+      "fingerprint" : "AQABz0qUkZK4oOfhL-CPc4e5C_w...",
+      "duration" : 100,
+      "matching-rate" : 1.0,
+      "release-properties" : []
+    }    
+
+This request only contains the mandatory properties. If any of these properties are missing, the request will be considered invalid.
+
+All possible properties are described below. See [this directory](Requests/) for more examples of requests that can be sent to the microservice.
+
+## Request properties
+- `fingerprint` — Base64-encoded string, an audio fingerprint generated using Chromaprint library. Mean of recognizing the audio file, cannot be an empty string. **Mandatory**.
+- `duration` — integer, audio file duration, in seconds. Mean of recognizing the audio file. **Mandatory**.
+- `matching-rate` — a real number (range: [0.0; 1.0]). In case the audio track has been identified, the matching rate can vary, and not always be equal to 1.0 (meaning, 100%). This property describes the lowest matching rate — a threshold, below which the tracks will be considered unidentified. **Mandatory**.
+- `release-properties` — array of strings that describes which audio properties must be included in the response in case the audio track has been successfully identified. If any of the properties are duplicated in the array, they will count as one. Any unknown strings will be considered invalid and sent back in the response in `invalid-properties` property. **Mandatory**. The possible properties are:
+
+      album, title, artists, music-brainz-artist-id, year, aisd, isrcs, album, album-artists, album-artists-sort, artists, disc, disc-count, genres, isrcs, length, music-brainz-artist-id, music-brainz-disc-id, music-brainz-release-id, music-brainz-release-status, music-brainz-track-id, track, track-count, title
+- `cover` — bool type property, determines if the response must contain the link to the cover art for the audio. The reason this property cannot be included in the `release-properties` property is that CoverArtArchive takes much longer to respond, and if the client is ready to take on the risk of acquiring the response later than without cover art, the action must be harder to perform. Not mandatory. The default value is `false`.
+- `cover-size` — integer type property that defines the maximum size of the picture the client supports, in pixels. The microservice is able to return images of the following sizes: 200x200, 500x500, or 1200x1200. Not mandatory. The default value is 500.
+    > Note: if the `cover-size` property is present, and the value of the `cover` property is `false`, the cover art will not be present in the response.
+- `external-links` — bool type property, defines if the links to external services (like YouTube, Spotify) must be included in the response. The property cannot be included in `release-properties`, as it is not really metadata of the audiofile. Not mandatory. The default value is `false`.
+- `priorities` — a JSON object, defines the choice criteria of a certain release. Each recording has multiple releases, and the client has an option to choose a certain release based on some criteria.
+
+    The object has two properties:
+    - `release-format` — a JSON object, the names of the fields are the type of the release, and the values are the priority values. The names of the fields (meaning, the names of the release types) are listed below:
+        
+          album, audio-drama, audiobook, broadcast, compilation, demo, dj-mix, ep, field-recording, interview, live, mixtape, other, remix, single, soundtrack, spokenword
+
+        Invalid name type releases are ignored, as they will never be applied to real-life scenarios. Only some of the release types can be listed. In that case the default value for any other release type that is not listed is 0.
+
+    - `release-country` — an array of strings, defines the priority of the release in case there are multiple release types with the same priority score. The strings represent two-letter country namings. The first country that is present both in the array and in the candidate releases defines the chosen release. In case no country is found in the candidate releases, the first release is chosen.
+
+    The property is not mandatory, and so are the fields of the JSON object the property contains. The chosen release is the first one by default.
+
+
+## Microservice response 
+In case there were no internal microservice errors, the response will be structured similarly to this:
+
+    HTTP/2 200 OK
+    content-type: application/json
+    date: Mon, 01 Jan 2024 00:00:00 GMT
+    server: Kestrel
+    content-length: 914
+    x-http2-stream-id: 3
+
+    {
+    "properties": {
+        "album": "Mirrors",
+        "title": "Suit & Tie (radio edit)",
+        "artists": [
+        "Justin Timberlake"
+        ],
+        "music-brainz-artist-id": "596ffa74-3d08-44ef-b113-765d43d12738",
+        "year": "2013",
+        "isrcs": "USRC11300019",
+        "album-artists": [
+        "Justin Timberlake"
+        ],
+        "album-artists-sort": [
+        "Timberlake, Justin"
+        ],
+        "disc": 1,
+        "disc-count": 1,
+        "genres": null,
+        "length": 268000,
+        "music-brainz-disc-id": "",
+        "music-brainz-release-id": "f84e3ffa-bcf2-45ca-ac4f-12a401762b35",
+        "music-brainz-release-status": "Official",
+        "music-brainz-track-id": "cf20c4c9-964d-405a-9878-9f83356e6ad7",
+        "track": 2,
+        "track-count": 2
+    },
+    "external-links": [
+        "https://www.discogs.com/release/4341516"
+    ],
+    "missing-properties": [
+        "image-link"
+    ],
+    "invalid-properties": [
+        "aisd"
+    ]
+    }
+
+## Response properties
+- `properties` —  a JSON object, audio metadata of the recognized audio track. Each field is a value of its own. If no requested fields were found, the value is an empty JSON object.
+- `external-links` — an array of strings, contains all found links to external services (like YouTube, Spotify). Present in the response only if the value of `external-links` property in the request was set to `true`.
+- `image-link` — a string to the cover art of the recognized audio file. Present in the response only if the value of `cover` property in the request was set to `true`.
+- `missing-properties` — an array of strings, the valid requested audio metadata names that were not found for some reason. The listed properties are not present in the `properties` JSON object.
+- `invalid-properties` — an array of strings, the requested audio metadata names that are unknown to the microservice.
+
 
 # Notes & features
 ## Considering mandatory database integration
