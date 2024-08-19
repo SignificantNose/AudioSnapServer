@@ -18,6 +18,17 @@ The inspiration for the project comes from [this article][chromaprint article], 
 Our goal was not to build a counterpart OR competitor to these solutions by any means, as our solution strongly relies on their services and their audio fingerprinting algorithms. Neither was our goal to monetise the application, even though it is allowed on a paid basis.  
 Same goes to the rewritten [open-source chromaprint library][original chromaprint library], which is basically the implementation of the audio fingerprinting algorithms described in [this article][chromaprint article]. The goal was to get familiar with the algorithms, and we believe that the best way to learn is to practise.
 
+# Table of contents
+
+- [How to launch](#how-to-launch)
+    - [Manual build](#manual-build)
+    - [Docker Compose application launch](#docker-compose-application-launch)
+- [Notes & features](#notes--features)
+    - [Considering mandatory database integration](#considering-mandatory-database-integration)
+    - [HTTP requests logging](#http-requests-logging)
+    - [File logging](#file-logging)
+    - [Configuring HTTPS](#configuring-https)
+
 
 
 # How to launch
